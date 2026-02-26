@@ -1,4 +1,4 @@
-# EIOT.Energy EMS DER/Site Controller Dev Kit
+# EIOT.Energy EMS DER/Site Controller Dev Kit - OpenAMI Metering Application
 
 ## Overview
 A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management systems (EMS) with support for various communication protocols and peripherals. There are a few N16R8 40/42/44 pin layouts. Th EMS kit th \evariant where the rgbw led is top center mounted just below the WROOM ESP32S3 surface mount module. All variants will work except the pins layout differs. 
@@ -103,6 +103,9 @@ This development kit includes a connection for AC power input. When working with
 2. Navigate to the directory where you want to store the project
 3. Clone the repository using git:
 4. `git clone https://github.com/nesl-admin/ems-dev.git`
+5. `git checkout <your-feature-branch>
+6. Follow steps 4 and 5.
+7. Use `git commit -s` to sign your Pull Request commits.
 
 ### Step 4: Open the Project in VSCode
 1. In VSCode, click on the PlatformIO icon in the left sidebar
@@ -134,27 +137,8 @@ This development kit includes a connection for AC power input. When working with
   - Your board is in bootloader mode (if required)
 - Check the PlatformIO documentation for additional help: https://docs.platformio.org/
 
-## Development Tracks
 
-### Lane A: Behind-the-Meter Sunspec Integration
-These challenges focus on Sunspec self-certification readiness for Modbus/Canbus IWF hub core functions:
-
-#### Sunspec Protocol Support
-- Sunspec BESS Gridtie Battery Modbus register support
-- Sunspec Gridtie Inverter Modbus register support
-- Sunspec Gridtie Solar Controller Modbus register support
-
-#### Integration Plugins
-- Sol-Ark Modbus LAN side R/W transcoder (converts to Sunspec Inverter Modbus formats)
-- Custom BMS, Inverter, Solar/Wind controller Modbus RTU plugins
-- Behind-the-Meter OPENAMI bidirectional monitor and control PUB/SUB framework
-- "Plug-in Solar" device plugin
-- AC Energy Meter plugins (Single Phase, Split Phase, Three Phase)
-- VFD Modbus RTU plugin
-- Energy IoT device plugin
-- Z-wave Plus IoT device interoperability plugin
-
-### Lane B: Front-of-Meter IEEE ISV StreetPoleEMS Integrations
+### Front-of-Meter IEEE ISV StreetPoleEMS Integrations
 
 #### Framework & Networking
 - Front-of-Meter OPENAMI bidirectional monitor and control PUB/SUB framework
@@ -191,8 +175,5 @@ These challenges focus on Sunspec self-certification readiness for Modbus/Canbus
 - Starlink MAC/PHY WWAN radio module integration
 - DRONE passby secure ondemand  BLE/wifi  networking, OTA, config, restoration
 
-## Oakland CA USA Port Labs Kickoff Workshop (April 22-23 2025)
-The code challenges listed above will be covered during the Port Labs workshop. Participants can choose challenges from either Lane A or Lane B based on their interests and requirements.
-
 ## Contributing
-Feel free to suggest additional integration ideas via a pull request or contribute to existing challenges.
+Check the https://github.com/energy-iot/docs Feel free to suggest additional integration ideas via a pull request or contribute to existing challenges.
