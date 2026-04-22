@@ -3,6 +3,12 @@
 ## Overview
 A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management systems (EMS) with support for various communication protocols and peripherals. There are a few N16R8 40/42/44 pin layouts. Th EMS kit th \evariant where the rgbw led is top center mounted just below the WROOM ESP32S3 surface mount module. All variants will work except the pins layout differs. 
 
+## Branch `hack-relays` (workshop / hackathon)
+
+**Intent for this branch:** Keep **OpenAMI-style metering** as the base story, but prioritize a **simple operator path**: Modbus (or equivalent) **reads per feed**, plus **discrete relay / SSR control per customer** (e.g. 8-channel I2C relay bank on the NESL **EMS 865B** bring-up in **nesl-meshems**). Cloud topics and full lane-B networking stay **out of scope** until the local meter + relay loop is stable.
+
+**Deliverable we want by end of hack:** Documented wiring, working toggle path from firmware to SSR outputs, and a clear mapping table (customer / meter id / relay channel) for field use.
+
 ## Features
 This development kit supports multiple peripherals using the PlatformIO and Arduino framework:
 - RS-485 MODBUS RTU communication
