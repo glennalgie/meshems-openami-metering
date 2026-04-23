@@ -97,10 +97,10 @@ elif defined(BOARD_VER_V2)
     #define DISPLAY_CS_PIN 9    //Chip select
 
     // ==================== RS485 INTERFACE ================
-    #define RS485_RX_1             GPIO_NUM_6   // RX here maps to RS485 HW-519 module's silk screen "RXD"
-    #define RS485_TX_1             GPIO_NUM_7   // TX here maps to RS485 HW-519 module's silk screen "TXD"
-    #define RS485_RX_2             GPIO_NUM_15  // RX here maps to RS485 HW-519 module's silk screen "RXD"
-    #define RS485_TX_2             GPIO_NUM_16  // TX here maps to RS485 HW-519 module's silk screen "TXD"
+    #define RS485_RX_1             GPIO_NUM_6   // ESP32 RX <- HW-519 TXD
+    #define RS485_TX_1             GPIO_NUM_7   // ESP32 TX -> HW-519 RXD
+    #define RS485_RX_2             GPIO_NUM_15
+    #define RS485_TX_2             GPIO_NUM_16
 
     // ==================== RELAY ==========================
     #define RELAY_1_PIN 38  //Pin to toggle the onboard SSR, solid state relay - 5 vdc TTL TBD for larger ssr
@@ -111,8 +111,8 @@ elif defined(BOARD_VER_V2)
     // These GPIOs must match how the 865B PCB routes that header to the ESP32-S3.
     // Defaults 4/5 match spare pins on the V001 pinout; if I2C scan finds nothing, ask
     // NESL for the 865B netlist or probe which module pins connect to which ESP pins.
-    #define I2C_SSR_SDA_GPIO     4
-    #define I2C_SSR_SCL_GPIO     5
+    #define I2C_SSR_SDA_GPIO     40
+    #define I2C_SSR_SCL_GPIO     0
     // PCF8574: 0x20-0x27 from DIP A2/A1/A0. PCF8574A often uses 0x38-0x3F.
     #define PCF8574_I2C_ADDR   0x20
 

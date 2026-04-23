@@ -7,8 +7,12 @@
 //#define WIFI_SSID "EMSLab"
 
 //NESL Lab
-#define WIFI_PW "E@rthday2025"
-#define WIFI_SSID "EMSLab"
+// #define WIFI_PW "E@rthday2025"
+// #define WIFI_SSID "EMSLab"
+
+//NESL Lab
+#define WIFI_SSID "Port Labs Members"
+#define WIFI_PW "lesstalkmorewifi"
 
 //secret lab
 //#define WIFI_SSID "Starlink"

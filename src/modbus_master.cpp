@@ -17,13 +17,19 @@
 
 // ==================== Modbus Device Addresses ====================
 // during staging of subpanel must stage each modbus meter with its assigned node number - in future could use qr code sticker per meter for faster staging of a subpanel
-//#define THERMOSTAT_1_ADDR 0x01    // when no meters shared on same rs485 modbus RTU line
-#define THERMOSTAT_1_ADDR 0x99  // at staging of subpanel set temp/humid sensor as modbus node num 99 so never conflicts
+#define THERMOSTAT_1_ADDR 0x01    // when no meters shared on same rs485 modbus RTU line
+//#define THERMOSTAT_1_ADDR 0x99  // at staging of subpanel set temp/humid sensor as modbus node num 99 so never conflicts
+
+// DO NOT USE FOR REAL , either 1 tenant meter per phase or all 3 meters on same phase 
+#define DDS238_1_ADDR 0x50
+#define DDS238_2_ADDR 0x51
+#define DDS238_3_ADDR 0x52
+
 
 // 3 meter subpanel , either 1 tenant meter per phase or all 3 meters on same phase 
-#define DDS238_1_ADDR 0x01
-#define DDS238_2_ADDR 0x02
-#define DDS238_3_ADDR 0x03
+// #define DDS238_1_ADDR 0x01
+// #define DDS238_2_ADDR 0x02
+// #define DDS238_3_ADDR 0x03
 // uncomment for 6 meter subpanel , either n tenant meters per phase, or all  meters on same phase 
 //#define DDS238_1_ADDR 0x04
 //#define DDS238_2_ADDR 0x05
@@ -180,14 +186,10 @@ void poll_energy_meters() {
 }
 
 void poll_thermostats() {
-    // Poll cabinet temp/humid sensor
-    for(int i = 0; i < MODBUS_NUM_THERMOSTATS; i++) {
-        //sht20_thermostats[i]->poll();  // TODO future option for multiple temp sensing in cabinet and nearby 
-    }
-    // Update data model cache with latest readings
+    sht20.poll();
+    // TODO: extend to sht20_thermostats[] array for multiple sensors
     update();
 }
-//sht20.poll();        // Get new readings
 
 /**
  * Main polling loop for Modbus communication
