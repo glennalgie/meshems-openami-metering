@@ -117,26 +117,6 @@ void setup_modbus_clients() {
  * Initialize Modbus master interface
  */
 
-static void scan_modbus_bus(uint32_t baud) {
-    ModbusMaster scanner;
-    Serial.printf("\n=== MODBUS SCAN @ %lu baud (addr 1-247) ===\n", baud);
-    _modbus1.begin(baud, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
-    bool found = false;
-    for (uint8_t addr = 1; addr <= 247; addr++) {
-        scanner.begin(addr, _modbus1);
-        uint8_t r4 = scanner.readInputRegisters(0x0000, 1);
-        uint8_t r3 = (r4 == 0xE2) ? scanner.readHoldingRegisters(0x0000, 1) : 0xFF;
-        if (r4 != 0xE2 || (r3 != 0xE2 && r3 != 0xFF)) {
-            found = true;
-            Serial.printf("  FOUND addr %d (0x%02X):", addr, addr);
-            if (r4 != 0xE2) Serial.printf("  FC04=0x%02X%s", r4, r4 == 0 ? "(OK)" : "");
-            if (r3 != 0xE2 && r3 != 0xFF) Serial.printf("  FC03=0x%02X%s", r3, r3 == 0 ? "(OK)" : "");
-            Serial.println();
-        }
-    }
-    if (!found) Serial.println("  No devices responded.");
-    Serial.println("=== SCAN DONE ===\n");
-}
 
 void setup_modbus_master() {
     // Reset GPIO pins for 2 ports of RS485
@@ -146,20 +126,13 @@ void setup_modbus_master() {
     gpio_reset_pin(RS485_TX_2);
 
     // UART1 routed through ESP32-S3 GPIO matrix — no rewiring needed, interrupt-safe with WiFi
-    _modbus1.begin(4800, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+    _modbus1.begin(9600, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
 
     int rxLevel = digitalRead(RS485_RX_1);
     Serial.printf("MODBUS SETUP: RS485_RX_1 (GPIO%d) idle level = %s (expect HIGH)\n",
                   RS485_RX_1, rxLevel ? "HIGH" : "LOW");
 
-    // Scan at common baud rates to find the SHT20's actual address
-    scan_modbus_bus(2400);
-    scan_modbus_bus(4800);
-    scan_modbus_bus(9600);
-    scan_modbus_bus(19200);
-
-    // Restore operating baud rate
-    _modbus1.begin(4800, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+    _modbus1.begin(9600, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
 
     // Setup connected devices
     setup_modbus_clients();

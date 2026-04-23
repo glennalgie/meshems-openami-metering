@@ -1,125 +1,259 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>MODBUS Current Monitor</title>
-  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreetPoleEMS Village Dashboard</title>
+  <link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
-    h1 { color: #333; text-align: center; }
-    .container { max-width: 800px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    #currentValue { font-size: 24px; text-align: center; margin: 20px 0; }
-    canvas { width: 100%; height: 300px; border: 1px solid #ddd; border-radius: 4px; }
-    .controls { margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-radius: 4px; }
-    .form-row { display: flex; align-items: center; margin-bottom: 10px; }
-    .form-row label { flex: 0 0 150px; }
-    .form-row input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-    button { background-color: #4CAF50; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; }
-    button:hover { background-color: #45a049; }
-    .status { margin-top: 10px; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; font-family: Arial, sans-serif; }
+    .app { display: grid; grid-template-columns: 2fr 1fr; min-height: 100vh; }
+    #map { min-height: 100vh; }
+    .panel { padding: 16px; background: #111827; overflow-y: auto; border-left: 1px solid #1f2937; }
+    h1, h2 { margin: 0 0 8px 0; }
+    .muted { color: #9ca3af; font-size: 14px; margin-bottom: 10px; }
+    .card { background: #1f2937; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .status-ok { color: #22c55e; font-size: 13px; margin-top: 8px; }
+    .status-err { color: #f87171; font-size: 13px; margin-top: 8px; }
+    .map-help { font-size: 12px; color: #94a3b8; margin-top: 8px; }
+    .meter-list { max-height: 260px; overflow-y: auto; }
+    .meter-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #334155; }
+    .meter-row:last-child { border-bottom: none; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      background: #1d4ed8;
+    }
+    button.off { background: #dc2626; }
+    #historyChart { width: 100%; max-height: 220px; }
+    .legend { display: flex; gap: 8px; font-size: 12px; margin-top: 8px; color: #cbd5e1; }
   </style>
 </head>
 <body>
-  <div class='container'>
-    <h1>MODBUS Current Monitor</h1>
-    <div id='currentValue'>Loading current data...</div>
-    <canvas id='currentChart'></canvas>
-    <div class='controls'>
-      <h3>Polling Settings</h3>
-      <div class='form-row'>
-        <label for='interval'>Polling Interval (ms):</label>
-        <input type='number' id='interval' min='50' max='10000' step='50' value='100'>
-        <button onclick='updateInterval()' style='margin-left: 10px;'>Update</button>
+  <div class="app">
+    <div id="map"></div>
+    <div class="panel">
+      <h1>StreetPoleEMS Dashboard</h1>
+      <div id="siteMeta" class="muted">Loading site...</div>
+
+      <div class="card">
+        <h2>Selection</h2>
+        <div id="selectionSummary" class="muted">Click a pole or meter on the map.</div>
       </div>
-      <div class='status' id='intervalStatus'></div>
-      <div class='form-row'>
-        <label>Current Interval:</label>
-        <span id='currentInterval'>100 ms</span>
+
+      <div class="card">
+        <h2>Daily Meter Timeline</h2>
+        <canvas id="historyChart"></canvas>
+      </div>
+
+      <div class="card">
+        <h2>Relay Controls</h2>
+        <div class="muted">Board 0 relay toggles are sent to the IoTMug I2C SSR board.</div>
+        <div class="map-help">Tip: channel 0 in UI maps to physical Relay 1 on IoTMug.</div>
+        <div id="relayStatus" class="muted"></div>
+        <div id="meterList" class="meter-list"></div>
       </div>
     </div>
   </div>
-  <script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
   <script>
-    // Setup Chart.js
-    const ctx = document.getElementById('currentChart').getContext('2d');
-    const currentChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'Current (A)',
-          data: [],
-          borderColor: 'rgb(75, 192, 192)',
-          tension: 0.1,
-          fill: false
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          y: {
-            beginAtZero: false,
-            title: {
-              display: true,
-              text: 'Current (A)'
-            }
-          },
-          x: {
-            title: {
-              display: true,
-              text: 'Reading #'
-            }
-          }
+    let state = { payload: null, selectedBoard: 0, selectedMeter: 0 };
+    let map;
+    let mapInitialized = false;
+    let chart;
+    let lastBounds;
+
+    function buildChart() {
+      const ctx = document.getElementById("historyChart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00"),
+          datasets: [{ label: "kWh", data: [], borderColor: "#38bdf8", backgroundColor: "rgba(56,189,248,0.25)", fill: true, tension: 0.2 }]
         },
-        animation: {
-          duration: 0
+        options: { responsive: true, plugins: { legend: { labels: { color: "#e2e8f0" } } }, scales: { x: { ticks: { color: "#cbd5e1" } }, y: { ticks: { color: "#cbd5e1" } } } }
+      });
+    }
+
+    function getBoard(boardId) {
+      return state.payload.boards.find((b) => b.boardId === boardId);
+    }
+
+    function getMeter(boardId, meterId) {
+      const board = getBoard(boardId);
+      return board ? board.meters.find((m) => m.meterId === meterId) : null;
+    }
+
+    async function refreshData() {
+      const res = await fetch("/api/dashboard");
+      state.payload = await res.json();
+      document.getElementById("siteMeta").textContent = "Site " + state.payload.siteId + " | last update " + new Date().toLocaleTimeString();
+      renderRelays();
+      renderSelection();
+      upsertMapLayers();
+    }
+
+    function renderSelection() {
+      const meter = getMeter(state.selectedBoard, state.selectedMeter);
+      if (!meter) {
+        return;
+      }
+      document.getElementById("selectionSummary").textContent =
+        "Board " + state.selectedBoard + " | Meter " + meter.meterId + " | Daily " + meter.dailyKwhTotal.toFixed(2) + " kWh | Relay " + (meter.relayState ? "ON" : "OFF");
+      chart.data.datasets[0].data = meter.historyKwhByHour;
+      chart.update();
+    }
+
+    function renderRelays() {
+      const board = getBoard(state.selectedBoard);
+      if (!board) {
+        return;
+      }
+      const list = document.getElementById("meterList");
+      list.innerHTML = "";
+
+      board.meters.forEach((meter) => {
+        const row = document.createElement("div");
+        row.className = "meter-row";
+        row.innerHTML = "<div>" + meter.tenantLabel + " (M" + meter.meterId + ")<br><span class='muted'>" + meter.dailyKwhTotal.toFixed(2) + " kWh/day</span></div>";
+        const btn = document.createElement("button");
+        btn.className = meter.relayState ? "off" : "";
+        btn.textContent = meter.relayState ? "Turn OFF" : "Turn ON";
+        btn.onclick = async () => {
+          const status = document.getElementById("relayStatus");
+          const next = meter.relayState ? 0 : 1;
+          try {
+            const rsp = await fetch("/api/relay?board=" + state.selectedBoard + "&channel=" + meter.relayChannel + "&state=" + next);
+            const data = await rsp.json();
+            if (!rsp.ok || !data.ok) {
+              throw new Error(data.error || ("HTTP " + rsp.status));
+            }
+            status.className = "status-ok";
+            status.textContent = "Applied board " + data.board + " ch " + data.channel + " => " + (data.state ? "ON" : "OFF") + " (mask " + data.mask + ")";
+            await refreshData();
+          } catch (err) {
+            status.className = "status-err";
+            status.textContent = "Relay command failed: " + err.message;
+          }
+        };
+        row.appendChild(btn);
+        row.onclick = () => { state.selectedMeter = meter.meterId; renderSelection(); };
+        list.appendChild(row);
+      });
+    }
+
+    function ensureMap() {
+      if (map) {
+        return;
+      }
+      map = new maplibregl.Map({
+        container: "map",
+        style: "https://demotiles.maplibre.org/style.json",
+        center: [state.payload.villageCenter.lon, state.payload.villageCenter.lat],
+        zoom: state.payload.villageCenter.zoom,
+        pitch: 35,
+        maxPitch: 60
+      });
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-left");
+      map.on("load", () => {
+        mapInitialized = true;
+        upsertMapLayers();
+      });
+    }
+
+    function upsertMapLayers() {
+      ensureMap();
+      const sourceId = "utility-geojson";
+      const data = state.payload.utilityGeoJson;
+
+      if (!mapInitialized) {
+        return;
+      }
+      if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, { type: "geojson", data: data });
+        map.addLayer({
+          id: "line-layer",
+          type: "line",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "line"],
+          paint: { "line-color": "#f59e0b", "line-width": 4 }
+        });
+        map.addLayer({
+          id: "pole-layer",
+          type: "circle",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "streetPoleEMS"],
+          paint: { "circle-radius": 9, "circle-color": "#22c55e" }
+        });
+        map.addLayer({
+          id: "meter-layer",
+          type: "circle",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "meter"],
+          paint: { "circle-radius": 6, "circle-color": "#38bdf8" }
+        });
+        map.addLayer({
+          id: "pole-extrusion",
+          type: "fill-extrusion",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "streetPoleEMS"],
+          paint: {
+            "fill-extrusion-color": "#16a34a",
+            "fill-extrusion-height": ["get", "height_m"],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.6
+          }
+        });
+
+        map.on("click", "pole-layer", (e) => {
+          const props = e.features[0].properties;
+          state.selectedBoard = Number(props.boardId);
+          state.selectedMeter = 0;
+          renderRelays();
+          renderSelection();
+        });
+        map.on("click", "meter-layer", (e) => {
+          const props = e.features[0].properties;
+          state.selectedBoard = Number(props.boardId);
+          state.selectedMeter = Number(props.meterId);
+          renderRelays();
+          renderSelection();
+        });
+      }
+
+      const source = map.getSource(sourceId);
+      if (source) {
+        source.setData(data);
+      }
+
+      const points = data.features
+        .map((f) => f.geometry && f.geometry.coordinates ? f.geometry.coordinates : null)
+        .filter((c) => Array.isArray(c) && c.length >= 2);
+      if (points.length > 1) {
+        const b = new maplibregl.LngLatBounds(points[0], points[0]);
+        points.forEach((p) => b.extend([p[0], p[1]]));
+        lastBounds = b;
+        if (map.getZoom() < 2 || map.getZoom() > 18) {
+          map.fitBounds(b, { padding: 80, duration: 0, maxZoom: 18 });
         }
       }
+    }
+
+    async function bootstrap() {
+      buildChart();
+      await refreshData();
+      setInterval(refreshData, 4000);
+    }
+
+    bootstrap().catch((err) => {
+      document.getElementById("siteMeta").textContent = "Dashboard error: " + err.message;
     });
-
-    // Function to update the chart with new data
-    function updateChart() {
-      fetch('/data')
-        .then(response => response.json())
-        .then(data => {
-          // Update current value display
-          document.getElementById('currentValue').textContent = 'Current: ' + data.current.toFixed(2) + ' A';
-          document.getElementById('currentInterval').textContent = data.interval + ' ms';
-          document.getElementById('interval').value = data.interval;
-
-          // Update chart
-          currentChart.data.labels = [];
-          currentChart.data.datasets[0].data = data.history;
-
-          // Generate labels based on number of data points
-          for (let i = 0; i < data.history.length; i++) {
-            currentChart.data.labels.push(i + 1);
-          }
-
-          currentChart.update();
-        })
-        .catch(error => console.error('Error fetching data:', error));
-    }
-
-    // Function to update the polling interval
-    function updateInterval() {
-      const interval = document.getElementById('interval').value;
-      fetch('/interval?ms=' + interval)
-        .then(response => response.text())
-        .then(data => {
-          document.getElementById('intervalStatus').textContent = data;
-          setTimeout(() => {
-            document.getElementById('intervalStatus').textContent = '';
-          }, 3000);
-          updateChart(); // Update to get the new interval
-        })
-        .catch(error => {
-          document.getElementById('intervalStatus').textContent = 'Error: ' + error;
-        });
-    }
-
-    // Update initially and then every 100ms
-    updateChart();
-    setInterval(updateChart, 100);
   </script>
 </body>
-</html> 
+</html>
