@@ -3,7 +3,7 @@
  * @brief Modbus master implementation for SHT20 temperature/humidity sensors
  */
 
-#include <SoftwareSerial.h>
+#include <HardwareSerial.h>
 #include <modbus.h>
 #include <pins.h>
 #include <data_model.h>
@@ -42,7 +42,7 @@
 
 
 // ==================== Serial Interface Setup ====================
-SoftwareSerial _modbus1(RS485_RX_1, RS485_TX_1); // RS485 modbus HW519 module pinout - all meters on a rs485 daisy chain (and door thermostat  and tamper door alarm)
+HardwareSerial _modbus1(1); // UART1 routed to RS485_RX_1/TX_1 via ESP32-S3 GPIO matrix
 //SoftwareSerial *modbus2(RS485_RX_2, RS485_TX_2); // uncomment when 2 modbus masters are to be used on the EMS PCB
 // TODO merge Canbus support and Modbus Client in other EMS branch to here ModCan
 
@@ -116,16 +116,51 @@ void setup_modbus_clients() {
 /**
  * Initialize Modbus master interface
  */
+
+static void scan_modbus_bus(uint32_t baud) {
+    ModbusMaster scanner;
+    Serial.printf("\n=== MODBUS SCAN @ %lu baud (addr 1-247) ===\n", baud);
+    _modbus1.begin(baud, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+    bool found = false;
+    for (uint8_t addr = 1; addr <= 247; addr++) {
+        scanner.begin(addr, _modbus1);
+        uint8_t r4 = scanner.readInputRegisters(0x0000, 1);
+        uint8_t r3 = (r4 == 0xE2) ? scanner.readHoldingRegisters(0x0000, 1) : 0xFF;
+        if (r4 != 0xE2 || (r3 != 0xE2 && r3 != 0xFF)) {
+            found = true;
+            Serial.printf("  FOUND addr %d (0x%02X):", addr, addr);
+            if (r4 != 0xE2) Serial.printf("  FC04=0x%02X%s", r4, r4 == 0 ? "(OK)" : "");
+            if (r3 != 0xE2 && r3 != 0xFF) Serial.printf("  FC03=0x%02X%s", r3, r3 == 0 ? "(OK)" : "");
+            Serial.println();
+        }
+    }
+    if (!found) Serial.println("  No devices responded.");
+    Serial.println("=== SCAN DONE ===\n");
+}
+
 void setup_modbus_master() {
-    // Reset GPIO pins for 2 ports of  RS485
+    // Reset GPIO pins for 2 ports of RS485
     gpio_reset_pin(RS485_RX_1);
     gpio_reset_pin(RS485_TX_1);
     gpio_reset_pin(RS485_RX_2);
     gpio_reset_pin(RS485_TX_2);
 
-    // Initialize serial at 9600 baud for now, good for less than 20 modbus nodes of scanning
-    _modbus1.begin(9600);
-    
+    // UART1 routed through ESP32-S3 GPIO matrix — no rewiring needed, interrupt-safe with WiFi
+    _modbus1.begin(4800, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+
+    int rxLevel = digitalRead(RS485_RX_1);
+    Serial.printf("MODBUS SETUP: RS485_RX_1 (GPIO%d) idle level = %s (expect HIGH)\n",
+                  RS485_RX_1, rxLevel ? "HIGH" : "LOW");
+
+    // Scan at common baud rates to find the SHT20's actual address
+    scan_modbus_bus(2400);
+    scan_modbus_bus(4800);
+    scan_modbus_bus(9600);
+    scan_modbus_bus(19200);
+
+    // Restore operating baud rate
+    _modbus1.begin(4800, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+
     // Setup connected devices
     setup_modbus_clients();
 }
@@ -186,7 +221,21 @@ void poll_energy_meters() {
 }
 
 void poll_thermostats() {
-    sht20.poll();
+    uint8_t result = sht20.poll();
+    if (result != 0x00) {
+        // Wait briefly for any late-arriving bytes, then print whatever the UART has
+        delay(200);
+        uint8_t n = 0;
+        uint8_t buf[16];
+        while (_modbus1.available() && n < sizeof(buf)) buf[n++] = _modbus1.read();
+        if (n > 0) {
+            Serial.printf("MODBUS RAW rx (%d bytes):", n);
+            for (uint8_t i = 0; i < n; i++) Serial.printf(" 0x%02X", buf[i]);
+            Serial.println();
+        } else {
+            Serial.println("MODBUS RAW rx: nothing — SHT20 sent no response");
+        }
+    }
     // TODO: extend to sht20_thermostats[] array for multiple sensors
     update();
 }
@@ -198,7 +247,7 @@ void loop_modbus_master() {
     if (millis() - lastPollMillis > ModbusMaster_pollrate) {
         Serial.println("Starting poll cycle...");
         poll_thermostats(); // Poll thermostat/environmental  sensors such as cabinet temp/humid/pressure/ , wire mains and evse temps etc
-        poll_energy_meters(); // Poll energy meters
+        // poll_energy_meters(); // Poll energy meters
         // TODO poll other modbus device on same link
         lastPollMillis = millis();
     }

@@ -7,9 +7,110 @@ A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management sy
 
 **Intent for this branch:** Keep **OpenAMI-style metering** as the base story, but prioritize a **simple operator path**: Modbus (or equivalent) **reads per feed**, plus **discrete relay / SSR control per customer** (8-channel I2C SSR bank on the NESL **EMS 865B**). Cloud topics and full lane-B networking stay **out of scope** until the local meter + relay loop is stable.
 
-**Firmware in this branch:** `include/i2c_ssr_bank.h`, `src/i2c_ssr_bank.cpp`, and `I2C_SSR_*` / `PCF8574_I2C_ADDR` in `include/pins.h` (ported from **nesl-meshems**). On boot, USB serial **115200** runs an **I2C scan**; keys **0-7** toggle SSR channels, **a** all off, **?** help. Wire **865B GND/5V/SDA/SCL** to the module **GND/+5V/SDA/SCL**; set the DIP address to match `PCF8574_I2C_ADDR`.
+**Firmware in this branch:** `include/i2c_ssr_bank.h`, `src/i2c_ssr_bank.cpp`, and `I2C_SSR_*` / `PCF8574_I2C_ADDR` in `include/pins.h`. On boot, USB serial **115200** runs an **I2C scan**; keys **0-7** toggle SSR channels, **a** all off, **?** help.
 
 **Deliverable we want by end of hack:** Documented wiring, working toggle path from firmware to SSR outputs, and a clear mapping table (customer / meter id / relay channel) for field use.
+
+### Current Status
+
+| Subsystem | Status | Notes |
+|---|---|---|
+| WiFi / MQTT | ✅ Working | Connects to broker, publishes all topics |
+| I2C SSR Bank (PCF8574) | ✅ Working | 0x27, channels 0–7 toggle via serial |
+| SHT20 Temp/Humidity (Modbus) | ❌ Timeout | See known issue below |
+| DDS238 Energy Meters (Modbus) | ❌ Not tested | Addresses set to 0x50–0x52 (wrong); change to 0x01–0x03 to match physical meters |
+| MCP2515 CAN | ❌ Init failure | `Entering Configuration Mode Failure` — SPI wiring or crystal freq mismatch |
+| Onboard SSR (GPIO38) | ✅ Working | Toggles on relay loop |
+
+### Known Issues
+
+#### SHT20 Modbus Timeout — SoftwareSerial / WiFi Interrupt Contention
+
+`src/modbus_master.cpp` uses `plerup/EspSoftwareSerial` on GPIO 6 (RX) and GPIO 7 (TX) for RS-485. On ESP32-S3 with WiFi active, the WiFi stack's high-frequency interrupts starve the SoftwareSerial GPIO ISR, causing received bytes to be missed and every poll to timeout (`err=0xE2 TIMEOUT`).
+
+**Confirmed:**
+- HW-519 TXD → GPIO 6 wire is connected (GPIO 6 idles HIGH as expected)
+- RS-485 twisted pair has valid signal (verified with bridge probe)
+- Both SHT20 modules (original and replacement) fail identically
+
+**Root cause:** `EspSoftwareSerial` is not interrupt-safe alongside the ESP32-S3 WiFi stack.
+
+**Fix:** Replace `SoftwareSerial _modbus1` with a hardware UART (`Serial1`) routed via the GPIO matrix:
+```cpp
+// In modbus_master.cpp, replace:
+SoftwareSerial _modbus1(RS485_RX_1, RS485_TX_1);
+// With:
+HardwareSerial _modbus1(1);  // UART1
+// And in setup_modbus_master():
+_modbus1.begin(9600, SERIAL_8N1, RS485_RX_1, RS485_TX_1);
+```
+The ESP32-S3 GPIO matrix routes hardware UARTs to any pin, so no rewiring needed.
+
+#### DDS238 Modbus Address Mismatch
+
+Addresses in `src/modbus_master.cpp` are set to `0x50`, `0x51`, `0x52`. Physical meters are typically staged at `0x01`, `0x02`, `0x03`. Update before testing meters.
+
+#### MCP2515 CAN Init Failure
+
+`can.cpp` sets `MCP_CRYSTAL_FREQ MCP_8MHZ`. If the MCP2515 module has a 16 MHz crystal, change to `MCP_16MHZ`. Also verify SPI pins (CS=GPIO2, MISO=GPIO42, MOSI=GPIO41, SCK=GPIO8, INT=GPIO17) are correctly wired.
+
+---
+
+### IOT MUG 8-Channel I2C SSR Board
+
+**Product:** [IOT MUG 8-Channel I2C Solid State Relay Module](https://www.iotmug.com/8-channel-i2c-solid-state-relay-module)
+
+#### I2C Address
+The board uses **0x27** (all address DIP switches ON) or **0x3F** (PCF8574A variant). Check the red DIP switch block on the board — the default out of box is **0x27**. Set `PCF8574_I2C_ADDR` in `include/pins.h` to match.
+
+#### Wiring (BOARD_VER_V3)
+| SSR Board Pin | EMS Board Connection | GPIO |
+|---|---|---|
+| VCC | 5V | — |
+| GND | GND | — |
+| SDA | SSR2 header | GPIO 14 |
+| SCL | SSR1 header | GPIO 20 |
+
+`I2C_SSR_SDA_GPIO` and `I2C_SSR_SCL_GPIO` in `include/pins.h` must match the physical wiring. Avoid GPIO46 — it has an internal pull-down that locks up the I2C bus.
+
+#### Channel Mapping
+The PCF8574 P0 bit maps to **relay 8** on the IOT MUG board (reversed order):
+
+| Bit | Relay |
+|---|---|
+| P7 (bit 7) | Relay 1 |
+| P6 (bit 6) | Relay 2 |
+| ... | ... |
+| P0 (bit 0) | Relay 8 |
+
+The firmware uses active-low logic (`I2C_SSR_ACTIVE_LOW 1`) which matches the IOT MUG board.
+
+---
+
+### Upload & Serial Monitor (macOS)
+
+The ESP32-S3 DevKitC-1 has **two USB-C ports**:
+- **COM port** (via CH343P UART bridge) — use this for both flashing and serial monitor
+- **USB port** (native ESP32-S3 USB) — not needed for normal dev use
+
+Always use the **COM port**. The firmware has `ARDUINO_USB_CDC_ON_BOOT` disabled so `Serial` output goes to UART0 (COM port), keeping flash and monitor on the same connector.
+
+If upload fails with "Resource busy", a `screen` session may be holding the port:
+```bash
+lsof /dev/cu.usbmodem*   # find the PID
+kill <PID>
+```
+
+Flash command:
+```bash
+pio run -t upload --upload-port /dev/cu.usbmodemXXXXX
+```
+
+Serial monitor:
+```bash
+screen /dev/cu.usbmodemXXXXX 115200
+# Exit: Ctrl+A, K, Y
+```
 
 ## Features
 This development kit supports multiple peripherals using the PlatformIO and Arduino framework:

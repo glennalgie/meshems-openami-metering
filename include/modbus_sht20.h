@@ -22,6 +22,8 @@ class Modbus_SHT20 : public ModbusMaster {
         float getHumidity();
         float getRawTemperature();
         float getRawHumidity();
+        uint16_t getFailCount();
+        uint16_t getSuccessCount();
 
     private:
         uint8_t modbus_address;
@@ -29,4 +31,6 @@ class Modbus_SHT20 : public ModbusMaster {
         unsigned long timestamp_last_failure;
         uint16_t temperature;
         uint16_t humidity;
+        uint16_t fail_count;
+        uint16_t success_count;
 };

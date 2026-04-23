@@ -128,10 +128,10 @@ void loop() {
   
     loop_modbus_client();
     loop_buttons(); 
-    loop_display();
-    loop_can();
-    loop_i2c_ssr_bank_serial();
-    loop_i2c_ssr_bank_blink_test();
+    //loop_display();
+    //loop_can();
+    //loop_i2c_ssr_bank_serial();
+    //loop_i2c_ssr_bank_blink_test();
     // TODO loop_IFTTT();
     // TODO loop_alerts();
     
