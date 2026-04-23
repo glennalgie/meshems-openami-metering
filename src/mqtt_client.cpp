@@ -516,7 +516,6 @@ static const CmdEntry cmd_table[] = {
 //TODO add a few lines where the mqtt_cmd_count stat is incremented
 // 
 void subscriber_callback(char* topic, uint8_t* payload, unsigned int length) {
-  Serial.printf("\n***GOT A COMMAND***\n");
   //sanity
   if (length > 254) {
     Serial.printf("MQTT CALLBACK: not handled: payload len overrun:%d\n", length);
@@ -630,6 +629,9 @@ void loop_mqtt() {
      Serial.println("Published stats/bandwidth");
      last_bandwidth_report_time = millis();
     }
+}
+
+void poll_mqtt() {
     mqttclient.loop();
 }
 

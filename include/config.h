@@ -23,6 +23,7 @@
 //TODO allow these to 
 extern int ModbusMaster_pollrate;    //in 1000's millisecond or seconds
 extern int MQTTPublish_rootrate;  //in 1000's millisecond or seconds
+extern int MQTTPoll_rate;         //in milliseconds, how often to call mqttclient.loop()
 
 
 

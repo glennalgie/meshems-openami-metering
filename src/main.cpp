@@ -101,6 +101,7 @@ void setup() {
 
 unsigned long lastModbusMillis = 0;
 unsigned long lastMQTTMillis = 0;
+unsigned long lastMQTTPollMillis = 0;
 
 
 void loop() {
@@ -109,6 +110,11 @@ void loop() {
    if (millis() - lastModbusMillis > ModbusMaster_pollrate) {
         lastModbusMillis = millis();
         loop_modbus_master();
+   }
+
+   if (millis() - lastMQTTPollMillis > MQTTPoll_rate) {
+        lastMQTTPollMillis = millis();
+        poll_mqtt();
    }
 
    if (millis() - lastMQTTMillis > MQTTPublish_rootrate) {
