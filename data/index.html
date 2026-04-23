@@ -28,7 +28,16 @@
       color: #fff;
       background: #1d4ed8;
     }
-    button.off { background: #dc2626; }
+    button.turn-on {
+      background: #16a34a;
+      border: 2px solid #dcfce7;
+      box-shadow: 0 0 0 1px #14532d inset;
+    }
+    button.turn-off {
+      background: #dc2626;
+      border: 2px solid #fee2e2;
+      box-shadow: 0 0 0 1px #7f1d1d inset;
+    }
     #historyChart { width: 100%; max-height: 220px; }
     .legend { display: flex; gap: 8px; font-size: 12px; margin-top: 8px; color: #cbd5e1; }
   </style>
@@ -42,18 +51,18 @@
 
       <div class="card">
         <h2>Selection</h2>
-        <div id="selectionSummary" class="muted">Click a pole or meter on the map.</div>
+        <div id="selectionSummary" class="muted">Click a pole or house on the map.</div>
       </div>
 
       <div class="card">
-        <h2>Daily Meter Timeline</h2>
+        <h2>Daily House Timeline</h2>
         <canvas id="historyChart"></canvas>
       </div>
 
       <div class="card">
         <h2>Relay Controls</h2>
-        <div class="muted">Board 0 relay toggles are sent to the IoTMug I2C SSR board.</div>
-        <div class="map-help">Tip: channel 0 in UI maps to physical Relay 1 on IoTMug.</div>
+        <div class="muted">Board 0 channels 0-7 are sent to the IoTMug I2C SSR board.</div>
+        <div class="map-help">Houses are color-coded by relay state: green connected (ON), red disconnected (OFF).</div>
         <div id="relayStatus" class="muted"></div>
         <div id="meterList" class="meter-list"></div>
       </div>
@@ -105,7 +114,7 @@
         return;
       }
       document.getElementById("selectionSummary").textContent =
-        "Board " + state.selectedBoard + " | Meter " + meter.meterId + " | Daily " + meter.dailyKwhTotal.toFixed(2) + " kWh | Relay " + (meter.relayState ? "ON" : "OFF");
+        "Board " + state.selectedBoard + " | " + meter.tenantLabel + " | Meter " + meter.meterId + " | Daily " + meter.dailyKwhTotal.toFixed(2) + " kWh | Relay " + (meter.relayState ? "ON" : "OFF");
       chart.data.datasets[0].data = meter.historyKwhByHour;
       chart.update();
     }
@@ -123,8 +132,8 @@
         row.className = "meter-row";
         row.innerHTML = "<div>" + meter.tenantLabel + " (M" + meter.meterId + ")<br><span class='muted'>" + meter.dailyKwhTotal.toFixed(2) + " kWh/day</span></div>";
         const btn = document.createElement("button");
-        btn.className = meter.relayState ? "off" : "";
-        btn.textContent = meter.relayState ? "Turn OFF" : "Turn ON";
+        btn.className = meter.relayState ? "turn-off" : "turn-on";
+        btn.textContent = meter.relayState ? "TURN OFF" : "TURN ON";
         btn.onclick = async () => {
           const status = document.getElementById("relayStatus");
           const next = meter.relayState ? 0 : 1;
@@ -154,7 +163,20 @@
       }
       map = new maplibregl.Map({
         container: "map",
-        style: "https://demotiles.maplibre.org/style.json",
+        style: {
+          version: 8,
+          sources: {
+            esriSatellite: {
+              type: "raster",
+              tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+              tileSize: 256,
+              attribution: "Esri World Imagery"
+            }
+          },
+          layers: [
+            { id: "esriSatellite", type: "raster", source: "esriSatellite" }
+          ]
+        },
         center: [state.payload.villageCenter.lon, state.payload.villageCenter.lat],
         zoom: state.payload.villageCenter.zoom,
         pitch: 35,
@@ -178,6 +200,13 @@
       if (!map.getSource(sourceId)) {
         map.addSource(sourceId, { type: "geojson", data: data });
         map.addLayer({
+          id: "court-layer",
+          type: "line",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "court"],
+          paint: { "line-color": "#fbbf24", "line-width": 2, "line-opacity": 0.85 }
+        });
+        map.addLayer({
           id: "line-layer",
           type: "line",
           source: sourceId,
@@ -192,11 +221,42 @@
           paint: { "circle-radius": 9, "circle-color": "#22c55e" }
         });
         map.addLayer({
-          id: "meter-layer",
+          id: "house-layer",
           type: "circle",
           source: sourceId,
-          filter: ["==", ["get", "assetType"], "meter"],
-          paint: { "circle-radius": 6, "circle-color": "#38bdf8" }
+          filter: ["==", ["get", "assetType"], "house"],
+          paint: {
+            "circle-radius": 7,
+            "circle-color": [
+              "case",
+              [
+                "any",
+                ["==", ["get", "relayState"], true],
+                ["==", ["get", "relayState"], "true"],
+                ["==", ["get", "relayState"], 1]
+              ],
+              "#22c55e",
+              "#ef4444"
+            ],
+            "circle-stroke-width": 1,
+            "circle-stroke-color": "#0f172a"
+          }
+        });
+        map.addLayer({
+          id: "house-label-layer",
+          type: "symbol",
+          source: sourceId,
+          filter: ["==", ["get", "assetType"], "house"],
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 12,
+            "text-offset": [0, 1.1]
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": "#0f172a",
+            "text-halo-width": 1
+          }
         });
         map.addLayer({
           id: "pole-extrusion",
@@ -218,7 +278,7 @@
           renderRelays();
           renderSelection();
         });
-        map.on("click", "meter-layer", (e) => {
+        map.on("click", "house-layer", (e) => {
           const props = e.features[0].properties;
           state.selectedBoard = Number(props.boardId);
           state.selectedMeter = Number(props.meterId);
@@ -233,8 +293,9 @@
       }
 
       const points = data.features
-        .map((f) => f.geometry && f.geometry.coordinates ? f.geometry.coordinates : null)
-        .filter((c) => Array.isArray(c) && c.length >= 2);
+        .filter((f) => f && f.geometry && f.geometry.type === "Point" && Array.isArray(f.geometry.coordinates))
+        .map((f) => f.geometry.coordinates)
+        .filter((c) => Number.isFinite(c[0]) && Number.isFinite(c[1]));
       if (points.length > 1) {
         const b = new maplibregl.LngLatBounds(points[0], points[0]);
         points.forEach((p) => b.extend([p[0], p[1]]));

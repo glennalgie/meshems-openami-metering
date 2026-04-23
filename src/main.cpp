@@ -51,10 +51,27 @@
 #include <data_model.h>
 
 static AsyncWebServer server(80);
-static const uint8_t kBoards = 2;
-static const uint8_t kChannelsPerBoard = 8;
+static const uint8_t kBoards = 1;
+static const uint8_t kChannelsPerBoard = 10;
+static const uint8_t kHardwareRelayChannels = 8;
 static const uint8_t kHistoryHours = 24;
 static bool relayShadow[kBoards][kChannelsPerBoard] = {};
+static const char* kTenantLabels[kChannelsPerBoard] = {
+    "Kato Family", "Nankya Family", "Ssewankambo Family", "Nabirye Family", "Okello Family",
+    "Achieng Family", "Mugisha Family", "Namusoke Family", "Byaruhanga Family", "Atim Family"
+};
+static const double kHouseLatLon[kChannelsPerBoard][2] = {
+    {0.3626654865345586, 32.53551516882119},
+    {0.3626195191078696, 32.53559312333386},
+    {0.36257188497217857, 32.53567085303205},
+    {0.36251902970261446, 32.53575027281464},
+    {0.3625701573901022, 32.53580467541863},
+    {0.3625489462228964, 32.53590189711509},
+    {0.3624890839504084, 32.535863006262296},
+    {0.36242760831352216, 32.53582958827747},
+    {0.3623963489621337, 32.535910395715796},
+    {0.36228129520905056, 32.535983770700994}
+};
 
 static float simulated_kwh(uint8_t board, uint8_t meter, uint8_t hour) {
     float base = 0.30f + (0.07f * meter) + (0.12f * board);
@@ -77,21 +94,47 @@ static void append_geojson(JsonArray features) {
         lineFeature["type"] = "Feature";
         JsonObject props = lineFeature["properties"].to<JsonObject>();
         props["assetType"] = "line";
-        props["name"] = "Village feeder";
+        props["name"] = "Court feeder";
 
         JsonObject geom = lineFeature["geometry"].to<JsonObject>();
         geom["type"] = "LineString";
         JsonArray coords = geom["coordinates"].to<JsonArray>();
 
         JsonArray c0 = coords.add<JsonArray>();
-        c0.add(36.8200); c0.add(-1.3020); c0.add(6.0);
+        c0.add(32.53545); c0.add(0.36270); c0.add(6.0);
         JsonArray c1 = coords.add<JsonArray>();
-        c1.add(36.8213); c1.add(-1.3013); c1.add(6.0);
+        c1.add(32.53605); c1.add(0.36225); c1.add(6.0);
     }
 
     for (uint8_t board = 0; board < kBoards; board++) {
-        float lon = 36.8203f + (0.0007f * board);
-        float lat = -1.3018f + (0.0004f * board);
+        double centerLon = 0.0;
+        double centerLat = 0.0;
+        for (uint8_t house = 0; house < kChannelsPerBoard; house++) {
+            centerLat += kHouseLatLon[house][0];
+            centerLon += kHouseLatLon[house][1];
+        }
+        centerLat /= (double)kChannelsPerBoard;
+        centerLon /= (double)kChannelsPerBoard;
+
+        JsonObject courtFeature = features.add<JsonObject>();
+        courtFeature["type"] = "Feature";
+        JsonObject courtProps = courtFeature["properties"].to<JsonObject>();
+        courtProps["assetType"] = "court";
+        courtProps["boardId"] = board;
+        courtProps["name"] = "Ssezibwa Homes Court";
+        JsonObject courtGeom = courtFeature["geometry"].to<JsonObject>();
+        courtGeom["type"] = "LineString";
+        JsonArray courtCoords = courtGeom["coordinates"].to<JsonArray>();
+        for (uint8_t house = 0; house < kChannelsPerBoard; house++) {
+            JsonArray p = courtCoords.add<JsonArray>();
+            p.add(kHouseLatLon[house][1]); // lon
+            p.add(kHouseLatLon[house][0]); // lat
+            p.add(0.5f);
+        }
+        JsonArray p0 = courtCoords.add<JsonArray>();
+        p0.add(kHouseLatLon[0][1]);
+        p0.add(kHouseLatLon[0][0]);
+        p0.add(0.5f);
 
         JsonObject poleFeature = features.add<JsonObject>();
         poleFeature["type"] = "Feature";
@@ -104,26 +147,28 @@ static void append_geojson(JsonArray features) {
         JsonObject geom = poleFeature["geometry"].to<JsonObject>();
         geom["type"] = "Point";
         JsonArray coord = geom["coordinates"].to<JsonArray>();
-        coord.add(lon);
-        coord.add(lat);
+        coord.add(centerLon);
+        coord.add(centerLat);
         coord.add(7.5);
 
         for (uint8_t meter = 0; meter < kChannelsPerBoard; meter++) {
             JsonObject meterFeature = features.add<JsonObject>();
             meterFeature["type"] = "Feature";
             JsonObject meterProps = meterFeature["properties"].to<JsonObject>();
-            meterProps["assetType"] = "meter";
+            meterProps["assetType"] = "house";
             meterProps["boardId"] = board;
             meterProps["meterId"] = meter;
             meterProps["relayChannel"] = meter;
-            meterProps["name"] = String("M-") + board + "-" + meter;
+            meterProps["name"] = String("House-") + (meter + 1);
+            meterProps["tenantLabel"] = kTenantLabels[meter];
             meterProps["dailyKwh"] = daily_kwh_total(board, meter);
+            meterProps["relayState"] = relayShadow[board][meter];
 
             JsonObject meterGeom = meterFeature["geometry"].to<JsonObject>();
             meterGeom["type"] = "Point";
             JsonArray meterCoord = meterGeom["coordinates"].to<JsonArray>();
-            meterCoord.add(lon + 0.00012f + (0.00002f * meter));
-            meterCoord.add(lat - 0.00010f + (0.00002f * meter));
+            meterCoord.add(kHouseLatLon[meter][1]); // lon
+            meterCoord.add(kHouseLatLon[meter][0]); // lat
             meterCoord.add(1.8);
         }
     }
@@ -136,9 +181,9 @@ static String build_dashboard_json() {
     doc["generatedAtMs"] = millis();
     doc["activeBoardForHardware"] = 0;
     JsonObject villageCenter = doc["villageCenter"].to<JsonObject>();
-    villageCenter["lon"] = 36.8208;
-    villageCenter["lat"] = -1.3015;
-    villageCenter["zoom"] = 16;
+    villageCenter["lon"] = 32.53578;
+    villageCenter["lat"] = 0.36251;
+    villageCenter["zoom"] = 18;
 
     JsonObject geojson = doc["utilityGeoJson"].to<JsonObject>();
     geojson["type"] = "FeatureCollection";
@@ -157,7 +202,7 @@ static String build_dashboard_json() {
             JsonObject meter = meters.add<JsonObject>();
             meter["meterId"] = channel;
             meter["relayChannel"] = channel;
-            meter["tenantLabel"] = String("Tenant ") + char('A' + channel);
+            meter["tenantLabel"] = kTenantLabels[channel];
             meter["relayState"] = relayShadow[board][channel];
             meter["dailyKwhTotal"] = daily_kwh_total(board, channel);
 
@@ -178,7 +223,7 @@ static bool set_relay_state(uint8_t board, uint8_t channel, bool state) {
         Serial.printf("Relay API reject: board=%u channel=%u out of range\n", board, channel);
         return false;
     }
-    if (board == 0) {
+    if (board == 0 && channel < kHardwareRelayChannels) {
         if (!set_i2c_ssr_channel(channel, state)) {
             Serial.printf("Relay API write failed: board=%u channel=%u state=%u\n", board, channel, state ? 1 : 0);
             return false;
@@ -195,8 +240,12 @@ static void setup_webserver() {
         return;
     }
 
-    for (uint8_t channel = 0; channel < 8; channel++) {
-        relayShadow[0][channel] = get_i2c_ssr_channel(channel);
+    for (uint8_t channel = 0; channel < kChannelsPerBoard; channel++) {
+        if (channel < kHardwareRelayChannels) {
+            relayShadow[0][channel] = get_i2c_ssr_channel(channel);
+        } else {
+            relayShadow[0][channel] = false;
+        }
         relayShadow[1][channel] = false;
     }
 
