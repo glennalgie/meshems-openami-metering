@@ -750,15 +750,26 @@ void loop() {
        const unsigned long nowMs = millis();
        if (nowMs - lastSerialStatusMs >= SERIAL_STATUS_INTERVAL_MS) {
            lastSerialStatusMs = nowMs;
-           Serial.printf(
-               "STATUS ms=%lu CS_ok=%d/%d CT0=%.2fA CT1=%.2fA r0_I=%.3f WiFi=%s\n",
-               nowMs,
-               circuitsetup_chip_init_ok(0) ? 1 : 0,
-               circuitsetup_chip_init_ok(1) ? 1 : 0,
-               circuitsetup_latest_amps(0),
-               circuitsetup_latest_amps(1),
-               readings[0].current,
-               wifi_client_connected() ? "up" : "down");
+           if (wifi_client_connected()) {
+               Serial.printf(
+                   "STATUS ms=%lu CS_ok=%d/%d CT0=%.2fA CT1=%.2fA r0_I=%.3f WiFi=up ip=%s\n",
+                   nowMs,
+                   circuitsetup_chip_init_ok(0) ? 1 : 0,
+                   circuitsetup_chip_init_ok(1) ? 1 : 0,
+                   circuitsetup_latest_amps(0),
+                   circuitsetup_latest_amps(1),
+                   readings[0].current,
+                   get_wifi_ip().c_str());
+           } else {
+               Serial.printf(
+                   "STATUS ms=%lu CS_ok=%d/%d CT0=%.2fA CT1=%.2fA r0_I=%.3f WiFi=down\n",
+                   nowMs,
+                   circuitsetup_chip_init_ok(0) ? 1 : 0,
+                   circuitsetup_chip_init_ok(1) ? 1 : 0,
+                   circuitsetup_latest_amps(0),
+                   circuitsetup_latest_amps(1),
+                   readings[0].current);
+           }
        }
    }
 #endif

@@ -2,7 +2,7 @@
 
 ## StreetPoleEMS web dashboard (lab demo)
 
-Operator UI served from the ESP32 (`data/index.html` over Wi‑Fi): 3D map, per-tenant relay controls, timelines, and MQTT command feedback. This capture is from the **Uganda-oriented lab simulation** stack (not a 1:1 production field deployment).
+Operator UI served from the ESP32 (`data/index.html` over Wi‑Fi): 3D map, per-tenant relay controls, a D3 **flat-baseline stacked** timeline (optional Chart.js stacked view), and MQTT command feedback. This capture is from the **Uganda-oriented lab simulation** stack (not a 1:1 production field deployment).
 
 [![StreetPoleEMS dashboard — latest lab UI](uganda_relay_latest.png)](uganda_relay_latest.png)
 
@@ -180,7 +180,7 @@ screen /dev/cu.usbmodemXXXXX 115200
 
 This branch now includes an operator-focused web dashboard served by the ESP32:
 
-- `/` serves `data/index.html` (MapLibre + Chart.js UI)
+- `/` serves `data/index.html` (MapLibre + D3 stacked timeline / Chart.js UI)
 - `/api/dashboard` returns dashboard JSON with embedded GeoJSON features
 - `/api/relay?board=<id>&channel=<id>&state=<0|1>` toggles relay state and returns command result
 
@@ -227,7 +227,9 @@ After firmware + filesystem are flashed, use this quick sequence to reach `data/
    ```bash
    pio device monitor -b 115200 --port /dev/cu.usbmodemXXXXX
    ```
-3. Watch boot logs for the assigned IP address (for example `192.168.95.54`).
+3. Find the device IP in serial output:
+   - **Right after WiFi connects**, the firmware prints one line: `wifi: <SSID>: <a.b.c.d>` (from `src/wifi.cpp`). If you opened the monitor late, **press the EN/RESET button** and scroll up to catch that line.
+   - **Every few seconds** the `STATUS ...` line also includes `WiFi=up ip=<a.b.c.d>` when connected, so the address stays visible without scrolling for boot logs.
 4. In a browser, open:
    - `http://<device-ip>/` (serves `data/index.html`)
    - `http://<device-ip>/api/dashboard` (raw JSON check)

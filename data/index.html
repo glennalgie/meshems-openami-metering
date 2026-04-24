@@ -81,6 +81,24 @@
       background: rgba(56, 189, 248, 0.08);
       box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.1);
     }
+    .relay-bulk-card .relay-bulk-pair-row {
+      padding: 8px 6px 0;
+      border-bottom: none;
+    }
+    button.relay-bulk-off {
+      background: #9a3412;
+      font-size: 11px;
+      padding: 5px 10px;
+      font-weight: 700;
+    }
+    button.relay-bulk-off:hover { filter: brightness(1.08); }
+    button.relay-bulk-on {
+      background: #047857;
+      font-size: 11px;
+      padding: 5px 10px;
+      font-weight: 700;
+    }
+    button.relay-bulk-on:hover { filter: brightness(1.08); }
     .circuit-block .cb-head {
       font-size: 10px;
       font-weight: 700;
@@ -110,8 +128,15 @@
     .history-toolbar label { font-size: 12px; color: #e2e8f0; cursor: pointer; user-select: none; }
     .history-toolbar input { accent-color: #38bdf8; margin-right: 6px; }
     .history-plot-area { position: relative; min-height: 240px; }
-    .history-ridge-mount { width: 100%; min-height: 280px; }
+    .history-ridge-mount { width: 100%; min-height: 260px; }
     .history-ridge-mount svg { display: block; max-width: 100%; }
+    .history-stream-legend {
+      display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 8px; font-size: 10px; color: #94a3b8; align-items: center;
+    }
+    .history-stream-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .history-stream-legend i {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.25);
+    }
     #historyChart { width: 100%; max-height: 280px; display: none; }
     .legend { display: flex; gap: 8px; font-size: 12px; margin-top: 8px; color: #cbd5e1; }
     .cs-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
@@ -241,18 +266,17 @@
         <h2>Daily House Timeline</h2>
         <div class="history-toolbar" role="radiogroup" aria-label="Timeline chart style">
           <span style="font-size:12px;color:#94a3b8">View</span>
-          <label><input type="radio" name="historyViewMode" value="ridge" checked> Ridgeline (D3)</label>
+          <label><input type="radio" name="historyViewMode" value="ridge" checked> D3 stacked (flat base)</label>
           <label><input type="radio" name="historyViewMode" value="stacked"> Stacked chart (Chart.js)</label>
         </div>
         <div id="historyBlurbRidge" class="muted" style="font-size:12px;margin-bottom:6px">
-          <strong>Ridgeline</strong> (<a href="https://observablehq.com/@d3/ridgeline-plot" target="_blank" rel="noopener">D3 example</a>): one band per circuit so fills never cross another layer. Full <strong>24h</strong> (0–23h); dashed <strong>now</strong> at ~14h. Secondary (cool) higher, Primary (warm) lower; each row scales to its own max kWh/h.
-          <strong>Earlier today</strong>: area under the curve. <strong>Rest of day</strong>: area only if SSR is ON; line still shows projection when OFF.
+          <strong>Stacked timeline</strong> (D3): same data as a streamgraph, but with a <strong>flat zero baseline</strong> — only the <strong>upper outline</strong> traces total compounded kWh/h for the hour. <strong>Primary</strong> (warm) bands sit on the bottom, <strong>Secondary</strong> (cool) stack above. Full <strong>24h</strong> (0–23h); dashed <strong>now</strong> at ~14h. After now, an SSR that is OFF contributes 0 thickness in its band.
         </div>
         <div id="historyBlurbStacked" class="muted" style="font-size:12px;margin-bottom:6px;display:none">
           <strong>Stacked chart</strong> (Chart.js): one shared y-axis for total kWh/h. Hours before <strong>now</strong> (~14h) filled as if every circuit were on. After now: stacked fills only for SSRs that are ON; each circuit still draws its projected line when OFF. Primary (warm) at the bottom of the stack, Secondary (cool) above.
         </div>
         <div class="history-plot-area">
-          <div id="historyRidgeMount" class="history-ridge-mount" aria-label="Daily house timeline ridgeline"></div>
+          <div id="historyRidgeMount" class="history-ridge-mount" aria-label="Daily house timeline streamgraph"></div>
           <canvas id="historyChart" aria-label="Daily house timeline stacked chart"></canvas>
         </div>
       </div>
@@ -566,6 +590,9 @@
       { label: "H2", pri: [3], sec: [4, 5, 6, 7] },
       { label: "H3", pri: [8], sec: [9] }
     ];
+    /** SSR channels for bulk “all Primary / all Secondary” (matches firmware tenant mapping). */
+    const SSR_PRIMARY_CHANNELS = [0, 2, 4];
+    const SSR_SECONDARY_CHANNELS = [1, 3, 5];
     const CHART_PRI_WARM = ["#fb923c", "#f97316", "#ea580c"];
     const CHART_SEC_COLD = ["#38bdf8", "#22d3ee", "#818cf8"];
 
@@ -839,30 +866,22 @@
     }
 
     /**
-     * D3 ridgeline (see https://observablehq.com/@d3/ridgeline-plot): one horizontal band per circuit
-     * so area fills never intrude on another series. Each row auto-scales kWh/h to its own band.
+     * D3 stacked areas: stackOffsetNone (flat bottom at 0), keys Pri-first so Primary sits low.
+     * Cumulative total is the top edge of the stack; drawn again as a bold outline.
      */
-    function renderHistoryRidgeline(mount, board) {
+    function renderHistoryStreamgraph(mount, board) {
       if (typeof d3 === "undefined") {
         mount.textContent = "D3 failed to load.";
         return;
       }
       const recN = HISTORY_NOW_SPLIT;
       const selHh = householdIndexForMeterId(state.selectedMeter);
-      const rows = [];
+
+      const layersMeta = [];
       for (let i = 0; i < 3; i++) {
         const cfg = HOUSEHOLD_CIRCUIT_METERS[i];
-        rows.push({
-          label: cfg.label + " Sec",
-          col: CHART_SEC_COLD[i],
-          full: sumHistoryKwhByHour(board.meters, cfg.sec),
-          ch: [1, 3, 5][i],
-          emphasis: selHh === i
-        });
-      }
-      for (let i = 0; i < 3; i++) {
-        const cfg = HOUSEHOLD_CIRCUIT_METERS[i];
-        rows.push({
+        layersMeta.push({
+          key: "p" + i,
           label: cfg.label + " Pri",
           col: CHART_PRI_WARM[i],
           full: sumHistoryKwhByHour(board.meters, cfg.pri),
@@ -870,26 +889,105 @@
           emphasis: selHh === i
         });
       }
+      for (let i = 0; i < 3; i++) {
+        const cfg = HOUSEHOLD_CIRCUIT_METERS[i];
+        layersMeta.push({
+          key: "s" + i,
+          label: cfg.label + " Sec",
+          col: CHART_SEC_COLD[i],
+          full: sumHistoryKwhByHour(board.meters, cfg.sec),
+          ch: [1, 3, 5][i],
+          emphasis: selHh === i
+        });
+      }
+      const keys = layersMeta.map((L) => L.key);
+
+      const wide = d3.range(HISTORY_DAY_HOURS).map((h) => {
+        const row = { hour: h };
+        layersMeta.forEach((L) => {
+          let v = Math.max(0, Number(L.full[h]) || 0);
+          if (h >= recN && !relayChannelOn(board, L.ch)) {
+            v = 0;
+          }
+          row[L.key] = v;
+        });
+        return row;
+      });
+
+      const hourlySum = wide.map((r) => keys.reduce((acc, k) => acc + (Number(r[k]) || 0), 0));
+      if ((d3.max(hourlySum) || 0) < 1e-9) {
+        mount.textContent = "No kWh/h data to plot.";
+        return;
+      }
+
+      const stack = d3.stack()
+        .keys(keys)
+        .order(d3.stackOrderNone)
+        .offset(d3.stackOffsetNone);
+
+      let series;
+      try {
+        series = stack(wide);
+      } catch (err) {
+        mount.textContent = "Stacked chart layout failed: " + (err && err.message ? err.message : String(err));
+        return;
+      }
 
       const width = Math.max(300, mount.getBoundingClientRect().width || 360);
-      const rowH = 38;
-      const margin = { top: 20, right: 10, bottom: 30, left: 68 };
+      const margin = { top: 22, right: 10, bottom: 30, left: 10 };
+      const chartH = 200;
+      const svgH = margin.top + chartH + margin.bottom;
       const innerW = width - margin.left - margin.right;
-      const chartBottom = margin.top + rows.length * rowH;
-      const height = chartBottom + margin.bottom;
+      const chartBottom = margin.top + chartH;
 
       const x = d3.scaleLinear().domain([0, HISTORY_DAY_HOURS - 1]).range([margin.left, margin.left + innerW]);
       const xNow = (x(recN - 1) + x(recN)) / 2;
 
-      const areaCurve = d3.curveMonotoneX;
-      const lineCurve = d3.curveMonotoneX;
+      const yHi = d3.max(series, (ly) => d3.max(ly, (d) => d[1])) || 0;
+      const yPad = Math.max(yHi * 0.06, 0.02);
+      const y = d3.scaleLinear().domain([0, yHi + yPad]).range([chartBottom, margin.top]);
+
+      const area = d3.area()
+        .curve(d3.curveMonotoneX)
+        .defined((d) => d && d.data && Number.isFinite(d.data.hour))
+        .x((d) => x(d.data.hour))
+        .y0((d) => y(d[0]))
+        .y1((d) => y(d[1]));
+
+      const metaByKey = new Map(layersMeta.map((L) => [L.key, L]));
 
       mount.innerHTML = "";
-      const svg = d3.select(mount).append("svg")
-        .attr("viewBox", `0 0 ${width} ${height}`)
+      const wrap = d3.select(mount).append("div").attr("class", "history-stream-wrap");
+      const svg = wrap.append("svg")
+        .attr("viewBox", `0 0 ${width} ${svgH}`)
         .attr("width", "100%")
-        .attr("height", height)
+        .attr("height", svgH)
         .attr("role", "img");
+
+      series.forEach((layer) => {
+        const meta = metaByKey.get(layer.key);
+        svg.append("path")
+          .datum(layer)
+          .attr("fill", hexToRgba(meta.col, meta.emphasis ? 0.5 : 0.34))
+          .attr("stroke", "rgba(15, 23, 42, 0.35)")
+          .attr("stroke-width", 0.35)
+          .attr("d", area);
+      });
+
+      const topLayer = series[series.length - 1];
+      const topLine = d3.line()
+        .curve(d3.curveMonotoneX)
+        .defined((d) => d && d.data && Number.isFinite(d.data.hour))
+        .x((d) => x(d.data.hour))
+        .y((d) => y(d[1]));
+      svg.append("path")
+        .datum(topLayer)
+        .attr("fill", "none")
+        .attr("stroke", "rgba(226, 232, 240, 0.95)")
+        .attr("stroke-width", 2.25)
+        .attr("stroke-linejoin", "round")
+        .attr("pointer-events", "none")
+        .attr("d", topLine);
 
       const axisG = svg.append("g").attr("transform", `translate(0,${chartBottom})`);
       axisG.call(
@@ -904,7 +1002,7 @@
       svg.append("line")
         .attr("x1", xNow)
         .attr("x2", xNow)
-        .attr("y1", margin.top - 2)
+        .attr("y1", margin.top)
         .attr("y2", chartBottom)
         .attr("stroke", "rgba(148, 163, 184, 0.55)")
         .attr("stroke-width", 1)
@@ -912,7 +1010,7 @@
 
       svg.append("text")
         .attr("x", xNow)
-        .attr("y", margin.top - 6)
+        .attr("y", margin.top - 5)
         .attr("text-anchor", "middle")
         .attr("fill", "#cbd5e1")
         .attr("font-size", "11px")
@@ -921,77 +1019,16 @@
 
       svg.append("text")
         .attr("x", margin.left)
-        .attr("y", height - 6)
+        .attr("y", svgH - 6)
         .attr("fill", "#64748b")
         .attr("font-size", "9px")
-        .text("kWh/h per row (scaled to that circuit’s max for the day)");
+        .text("y-axis: stacked kWh/h from 0 (Pri on bottom, Sec above). Bold line = hourly total across all six.");
 
-      rows.forEach((row, r) => {
-        const bandTop = margin.top + r * rowH;
-        const bandBottom = bandTop + rowH - 6;
-        const curveSpan = rowH - 10;
-        const vmax = Math.max(1e-6, d3.max(row.full, (v) => Number(v) || 0)) * 1.1;
-        const yAt = (v) => bandBottom - (Math.max(0, Number(v) || 0) / vmax) * curveSpan;
-
-        const pastData = d3.range(0, recN).map((h) => ({ px: x(h), py: yAt(row.full[h]) }));
-        const areaPast = d3.area()
-          .x((d) => d.px)
-          .y0(bandBottom)
-          .y1((d) => d.py)
-          .curve(areaCurve);
-
-        const on = relayChannelOn(board, row.ch);
-        if (pastData.length > 0) {
-          svg.append("path")
-            .datum(pastData)
-            .attr("fill", hexToRgba(row.col, row.emphasis ? 0.42 : 0.28))
-            .attr("d", areaPast);
-        }
-
-        if (on && recN < HISTORY_DAY_HOURS) {
-          const futData = d3.range(recN, HISTORY_DAY_HOURS).map((h) => ({ px: x(h), py: yAt(row.full[h]) }));
-          if (futData.length > 0) {
-            const areaFut = d3.area()
-              .x((d) => d.px)
-              .y0(bandBottom)
-              .y1((d) => d.py)
-              .curve(areaCurve);
-            svg.append("path")
-              .datum(futData)
-              .attr("fill", hexToRgba(row.col, row.emphasis ? 0.34 : 0.2))
-              .attr("d", areaFut);
-          }
-        }
-
-        const linePts = d3.range(HISTORY_DAY_HOURS).map((h) => [x(h), yAt(row.full[h])]);
-        const lineGen = d3.line()
-          .x((d) => d[0])
-          .y((d) => d[1])
-          .curve(lineCurve);
-
-        svg.append("path")
-          .datum(linePts)
-          .attr("fill", "none")
-          .attr("stroke", row.col)
-          .attr("stroke-width", row.emphasis ? 2.1 : 1.15)
-          .attr("stroke-linejoin", "round")
-          .attr("d", lineGen);
-
-        svg.append("line")
-          .attr("x1", margin.left - 2)
-          .attr("x2", margin.left + innerW + 2)
-          .attr("y1", bandBottom + 1)
-          .attr("y2", bandBottom + 1)
-          .attr("stroke", "rgba(51, 65, 85, 0.65)")
-          .attr("stroke-width", 1);
-
-        svg.append("text")
-          .attr("x", 6)
-          .attr("y", bandTop + rowH / 2 + 2)
-          .attr("fill", row.emphasis ? "#f1f5f9" : "#94a3b8")
-          .attr("font-size", "9px")
-          .attr("font-weight", row.emphasis ? "700" : "500")
-          .text(row.label);
+      const leg = wrap.append("div").attr("class", "history-stream-legend");
+      layersMeta.forEach((L) => {
+        const row = leg.append("span");
+        row.append("i").attr("style", "background:" + hexToRgba(L.col, 0.78));
+        row.append("span").text(L.label);
       });
     }
 
@@ -1014,7 +1051,7 @@
           mount.textContent = "D3 failed to load; switch to Stacked chart or check the network.";
           return;
         }
-        renderHistoryRidgeline(mount, board);
+        renderHistoryStreamgraph(mount, board);
       } else {
         updateHistoryStackedChart(board);
       }
@@ -1258,34 +1295,65 @@
       updateCircuitSetupModalVisibility();
     }
 
+    async function applyRelayChannelState(boardId, channel, wantOn) {
+      const mr = state.payload && state.payload.mqttRelay;
+      const useMqtt = mr && mr.wsUrl && mr.cmdTopic && typeof mqtt !== "undefined";
+      if (useMqtt) {
+        await publishRelayMqtt(boardId, channel, !!wantOn);
+        return null;
+      }
+      const rsp = await fetch(
+        "/api/relay?board=" + boardId + "&channel=" + channel + "&state=" + (wantOn ? 1 : 0)
+      );
+      const data = await rsp.json();
+      if (!rsp.ok || !data.ok) {
+        throw new Error(data.error || "HTTP " + rsp.status);
+      }
+      return data;
+    }
+
+    async function applyRelayChannelGroup(boardId, channels, wantOn, statusEl, titleForStatus) {
+      const mr = state.payload && state.payload.mqttRelay;
+      const useMqtt = mr && mr.wsUrl && mr.cmdTopic && typeof mqtt !== "undefined";
+      for (let i = 0; i < channels.length; i++) {
+        await applyRelayChannelState(boardId, channels[i], wantOn);
+        if (i < channels.length - 1) {
+          await new Promise((r) => setTimeout(r, useMqtt ? 90 : 160));
+        }
+      }
+      await refreshData();
+      statusEl.className = "status-ok";
+      statusEl.textContent =
+        (useMqtt ? "MQTT" : "HTTP") +
+        " | " +
+        titleForStatus +
+        " SSR [" +
+        channels.join(", ") +
+        "] => " +
+        (wantOn ? "ON" : "OFF");
+    }
+
     function wireRelayButton(btn, statusEl, boardId, relayChannel, currentOn, labelForStatus, compact) {
       btn.className = (currentOn ? "turn-off" : "turn-on") + (compact ? " relay-btn-sm" : "");
       btn.textContent = currentOn ? "TURN OFF" : "TURN ON";
       btn.onclick = async (ev) => {
         ev.stopPropagation();
-        const next = currentOn ? 0 : 1;
+        const nextBool = !currentOn;
         const mr = state.payload && state.payload.mqttRelay;
         const useMqtt = mr && mr.wsUrl && mr.cmdTopic && typeof mqtt !== "undefined";
         try {
+          const data = await applyRelayChannelState(boardId, relayChannel, nextBool);
+          statusEl.className = "status-ok";
           if (useMqtt) {
-            await publishRelayMqtt(boardId, relayChannel, next);
-            statusEl.className = "status-ok";
             statusEl.textContent =
-              "MQTT → " + mr.cmdTopic + " | " + labelForStatus + " SSR " + relayChannel + " => " + (next ? "ON" : "OFF");
+              "MQTT → " + mr.cmdTopic + " | " + labelForStatus + " SSR " + relayChannel + " => " + (nextBool ? "ON" : "OFF");
             await new Promise((r) => setTimeout(r, 400));
-            await refreshData();
           } else {
-            const rsp = await fetch("/api/relay?board=" + boardId + "&channel=" + relayChannel + "&state=" + next);
-            const data = await rsp.json();
-            if (!rsp.ok || !data.ok) {
-              throw new Error(data.error || ("HTTP " + rsp.status));
-            }
-            statusEl.className = "status-ok";
             statusEl.textContent =
               "HTTP /api/relay | " + labelForStatus + " SSR " + data.channel + " => " + (data.state ? "ON" : "OFF") +
               " (mask " + data.mask + ")";
-            await refreshData();
           }
+          await refreshData();
         } catch (err) {
           statusEl.className = "status-err";
           statusEl.textContent = "Relay failed: " + err.message;
@@ -1316,6 +1384,105 @@
               }))
             : [];
       if (households.length) {
+        const bulkCard = document.createElement("div");
+        bulkCard.className = "feeder-relay-card relay-bulk-card";
+        bulkCard.style.cssText =
+          "border:1px solid #334155;border-radius:10px;padding:10px;margin-bottom:12px;background:#111827;";
+        const bulkTitle = document.createElement("div");
+        bulkTitle.style.cssText = "font-weight:700;margin-bottom:6px;color:#94a3b8;font-size:12px;";
+        bulkTitle.textContent = "All tenants — group SSRs";
+        bulkCard.appendChild(bulkTitle);
+
+        const pairRow = document.createElement("div");
+        pairRow.className = "circuit-pair-row relay-bulk-pair-row";
+
+        const makeBulkBlock = (roleKey, headText, hintText, channels, statusLabel) => {
+          const wrap = document.createElement("div");
+          wrap.className =
+            "circuit-block circuit-block--" + (roleKey === "priority" ? "priority" : "secondary");
+          const left = document.createElement("div");
+          left.style.cssText = "min-width:0;flex:1;";
+          const headEl = document.createElement("div");
+          headEl.className = "cb-head";
+          headEl.textContent = headText;
+          left.appendChild(headEl);
+          const subEl = document.createElement("div");
+          subEl.className = "cb-sub";
+          subEl.textContent = hintText;
+          left.appendChild(subEl);
+          const meta = document.createElement("div");
+          meta.className = "cb-meta";
+          meta.textContent = "SSR " + channels.join(", ");
+          left.appendChild(meta);
+
+          const btnCol = document.createElement("div");
+          btnCol.style.cssText =
+            "display:flex;flex-direction:column;align-items:stretch;gap:6px;flex-shrink:0;min-width:86px;";
+          const offBtn = document.createElement("button");
+          offBtn.type = "button";
+          offBtn.className = "relay-bulk-off relay-btn-sm";
+          offBtn.textContent = "ALL OFF";
+          const onBtn = document.createElement("button");
+          onBtn.type = "button";
+          onBtn.className = "relay-bulk-on relay-btn-sm";
+          onBtn.textContent = "ALL ON";
+
+          const runGroup = async (wantOn) => {
+            offBtn.disabled = true;
+            onBtn.disabled = true;
+            try {
+              await applyRelayChannelGroup(
+                state.selectedBoard,
+                channels,
+                wantOn,
+                status,
+                statusLabel
+              );
+            } catch (err) {
+              status.className = "status-err";
+              status.textContent = "Group relay failed: " + err.message;
+            }
+            offBtn.disabled = false;
+            onBtn.disabled = false;
+          };
+          offBtn.onclick = (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            runGroup(false);
+          };
+          onBtn.onclick = (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            runGroup(true);
+          };
+          btnCol.appendChild(offBtn);
+          btnCol.appendChild(onBtn);
+          wrap.appendChild(left);
+          wrap.appendChild(btnCol);
+          return wrap;
+        };
+
+        pairRow.appendChild(
+          makeBulkBlock(
+            "priority",
+            "Priority",
+            "All Priority circuits",
+            SSR_PRIMARY_CHANNELS,
+            "All Priority"
+          )
+        );
+        pairRow.appendChild(
+          makeBulkBlock(
+            "secondary",
+            "Secondary",
+            "All Secondary circuits",
+            SSR_SECONDARY_CHANNELS,
+            "All Secondary"
+          )
+        );
+        bulkCard.appendChild(pairRow);
+        list.appendChild(bulkCard);
+
         households.forEach((hh) => {
           const card = document.createElement("div");
           card.className = "feeder-relay-card";
