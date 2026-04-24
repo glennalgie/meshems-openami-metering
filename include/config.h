@@ -9,7 +9,8 @@
 #define MQTT_PUBLISH_INTERVAL   30000
 #define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
 #define MQTT_USER               "public"                  // leave empty for test.mosquitto.org
-#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org   
+#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org
+/* Dashboard relay buttons use MQTT.js over WSS; mqtt_client builds wsUrl from MQTT_USER:MQTT_PW@MQTT_SERVER (Shiftr). Other brokers may need code changes for path/port. */
 
 // DTM485 custom Ascii on serial on rsa485 -  Serial Pins and Baud Rate
 #define DTM485_SERIAL Serial2

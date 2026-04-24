@@ -54,11 +54,14 @@
 #include <data_model.h>
 #include <circuitsetup_meter.h>
 #include <pins.h>
+#include "circuit_paths_generated.h"
 
 static AsyncWebServer server(80);
 static const uint8_t kBoards = 1;
 static const uint8_t kChannelsPerBoard = 10;
 static const uint8_t kHardwareRelayChannels = 8;
+/** IoTMug SSR channels 0-5: three tenant households × (Primary + Secondary). Ch 6-7 unused for this model. */
+static const uint8_t kCircuitRelayCount = 6;
 static const uint8_t kHistoryHours = 24;
 static bool relayShadow[kBoards][kChannelsPerBoard] = {};
 static const char* kTenantLabels[kChannelsPerBoard] = {
@@ -78,14 +81,96 @@ static const double kHouseLatLon[kChannelsPerBoard][2] = {
     {0.36228129520905056, 32.535983770700994}
 };
 
+/** Apply logical ON/OFF to every house tied to SSR channel `ssrCh` (0-5). */
+static void apply_circuit_state_to_house_shadow(uint8_t board, uint8_t ssrCh, bool state) {
+    if (board >= kBoards || ssrCh >= kCircuitRelayCount) {
+        return;
+    }
+    switch (ssrCh) {
+        case 0:
+            relayShadow[board][0] = state;
+            break;
+        case 1:
+            relayShadow[board][1] = state;
+            relayShadow[board][2] = state;
+            break;
+        case 2:
+            relayShadow[board][3] = state;
+            break;
+        case 3:
+            relayShadow[board][4] = state;
+            relayShadow[board][5] = state;
+            relayShadow[board][6] = state;
+            relayShadow[board][7] = state;
+            break;
+        case 4:
+            relayShadow[board][8] = state;
+            break;
+        case 5:
+            relayShadow[board][9] = state;
+            break;
+        default:
+            break;
+    }
+}
+
+static bool ssr_channel_state_from_shadow(uint8_t board, uint8_t ssrCh) {
+    if (board >= kBoards || ssrCh >= kCircuitRelayCount) {
+        return false;
+    }
+    switch (ssrCh) {
+        case 0:
+            return relayShadow[board][0];
+        case 1:
+            return relayShadow[board][1];
+        case 2:
+            return relayShadow[board][3];
+        case 3:
+            return relayShadow[board][4];
+        case 4:
+            return relayShadow[board][8];
+        case 5:
+            return relayShadow[board][9];
+        default:
+            return false;
+    }
+}
+
+static void sync_house_shadow_from_hardware_ssr(uint8_t board) {
+    if (board >= kBoards) {
+        return;
+    }
+    for (uint8_t h = 0; h < kChannelsPerBoard; h++) {
+        relayShadow[board][h] = false;
+    }
+    for (uint8_t ch = 0; ch < kCircuitRelayCount; ch++) {
+        bool st = false;
+        if (board == 0 && ch < kHardwareRelayChannels) {
+            st = get_i2c_ssr_channel(ch);
+        }
+        apply_circuit_state_to_house_shadow(board, ch, st);
+    }
+}
+
+static float gaussian_bell(float x, float mu, float sigma) {
+    const float z = (x - mu) / sigma;
+    return expf(-0.5f * z * z);
+}
+
+/** Typical residential dual peak (morning ~8h, evening ~19–20h); trough mid‑afternoon. */
 static float simulated_kwh(uint8_t board, uint8_t meter, uint8_t hour) {
     const float m = float(meter);
-    const float phase = m * 0.55f;  // stagger daily curve per tenant (dashboard chart layering)
-    float base = 0.28f + (0.055f * m) + (0.10f * float(board));
-    float daywave = 0.11f * sinf((float(hour) / 24.0f) * 6.2831853f + phase);
-    float evening = (hour >= 18 && hour <= 22) ? (0.14f + 0.025f * fmodf(m, 4.0f)) : 0.0f;
-    float midday = (hour >= 11 && hour <= 15) ? (0.04f * sinf(m * 0.8f + float(hour) * 0.15f)) : 0.0f;
-    return max(0.05f, base + daywave + evening + midday);
+    const float b = float(board);
+    const float t = float(hour) + 0.5f;  // center of clock hour 0..23
+    const float phase = m * 0.22f + b * 0.08f;
+    const float morning = gaussian_bell(t + phase * 0.08f, 8.0f, 2.1f);
+    const float evening = gaussian_bell(t - phase * 0.06f, 19.4f, 2.4f);
+    const float dual = morning * 1.05f + evening * 1.28f;
+    const float floor = 0.055f + 0.010f * m + 0.06f * b;
+    const float peakAmp = 0.22f + 0.045f * fmodf(m, 5.0f) + 0.05f * b;
+    float y = floor + peakAmp * dual;
+    y *= 1.0f + 0.035f * sinf(t * 0.55f + m * 0.7f);
+    return max(0.04f, y);
 }
 
 static float daily_kwh_total(uint8_t board, uint8_t meter) {
@@ -97,11 +182,29 @@ static float daily_kwh_total(uint8_t board, uint8_t meter) {
 }
 
 static constexpr double kDegToRad = 0.017453292519943295;
+static constexpr double kPi = 3.14159265358979323846;
 
-/** Narrow horizontal ribbon in the sky (fill-extrusion base..height) along a ground segment. */
+/** Closed GeoJSON ring approximating a horizontal circle (meters radius) at (lat, lon). */
+static void append_circle_footprint_ring(JsonArray ring, double lat, double lon, double radiusM, int segments) {
+    const double cosLat = cos(lat * kDegToRad);
+    const double clampedCos = (cosLat > 0.2) ? cosLat : 0.2;
+    for (int i = 0; i <= segments; i++) {
+        const double ang = (2.0 * kPi * i) / segments;
+        const double e = radiusM * cos(ang);
+        const double n = radiusM * sin(ang);
+        const double la = lat + n / 111320.0;
+        const double lo = lon + e / (111320.0 * clampedCos);
+        JsonArray pt = ring.add<JsonArray>();
+        pt.add(lo);
+        pt.add(la);
+    }
+}
+
+/** Narrow horizontal ribbon in the sky (fill-extrusion base..height) along a ground segment.
+ *  If ribbonCircuitId < 255, sets properties.circuitId and a stable GeoJSON feature id for dashboard highlighting. */
 static void append_ribbon_segment(JsonArray features, double lat0, double lon0, double lat1, double lon1,
                                   double halfWidthM, float baseM, float topM, const char* assetType,
-                                  const char* ribbonName) {
+                                  const char* ribbonName, uint8_t ribbonCircuitId, uint16_t ribbonSegmentIdx) {
     const double midLat = (lat0 + lat1) * 0.5;
     const double cosLat = cos(midLat * kDegToRad);
     const double clampedCos = (cosLat > 0.2) ? cosLat : 0.2;
@@ -131,6 +234,10 @@ static void append_ribbon_segment(JsonArray features, double lat0, double lon0, 
     if (ribbonName != nullptr) {
         props["name"] = ribbonName;
     }
+    if (ribbonCircuitId < 255) {
+        props["circuitId"] = ribbonCircuitId;
+        f["id"] = String("car-") + String((unsigned)ribbonCircuitId) + "-s" + String((unsigned)ribbonSegmentIdx);
+    }
     props["extrudeBase"] = baseM;
     props["extrudeHeight"] = topM;
 
@@ -155,11 +262,9 @@ static void append_ribbon_segment(JsonArray features, double lat0, double lon0, 
 
 static void append_house_extrusion(JsonArray features, double lat, double lon, uint8_t board, uint8_t meter,
                                    bool relayState, float dailyKwh) {
-    constexpr double kHalfM = 5.0;
-    const double cosLat = cos(lat * kDegToRad);
-    const double clampedCos = (cosLat > 0.2) ? cosLat : 0.2;
-    const double dLat = kHalfM / 111320.0;
-    const double dLon = kHalfM / (111320.0 * clampedCos);
+    /** Narrow vertical service-pole style cylinder (small footprint, tall extrusion) — many segments so it reads round in 3D. */
+    constexpr double kCylinderRadiusM = 1.75;
+    constexpr int kCylinderSegments = 48;
 
     JsonObject f = features.add<JsonObject>();
     f["type"] = "Feature";
@@ -174,31 +279,19 @@ static void append_house_extrusion(JsonArray features, double lat, double lon, u
     p["dailyKwh"] = dailyKwh;
     p["relayState"] = relayState;
     p["extrudeBase"] = 0.0f;
-    p["extrudeHeight"] = 3.6f;
+    p["extrudeHeight"] = 9.5f;
 
     JsonObject geom = f["geometry"].to<JsonObject>();
     geom["type"] = "Polygon";
     JsonArray rings = geom["coordinates"].to<JsonArray>();
     JsonArray ring = rings.add<JsonArray>();
-    auto corner = [&](double la, double lo) {
-        JsonArray pt = ring.add<JsonArray>();
-        pt.add(lo);
-        pt.add(la);
-    };
-    corner(lat - dLat, lon - dLon);
-    corner(lat - dLat, lon + dLon);
-    corner(lat + dLat, lon + dLon);
-    corner(lat + dLat, lon - dLon);
-    corner(lat - dLat, lon - dLon);
+    append_circle_footprint_ring(ring, lat, lon, kCylinderRadiusM, kCylinderSegments);
 }
 
 static void append_pole_extrusion(JsonArray features, double lat, double lon, uint8_t board, const String& name,
                                   float heightM) {
-    constexpr double kHalfM = 0.45;
-    const double cosLat = cos(lat * kDegToRad);
-    const double clampedCos = (cosLat > 0.2) ? cosLat : 0.2;
-    const double dLat = kHalfM / 111320.0;
-    const double dLon = kHalfM / (111320.0 * clampedCos);
+    constexpr double kPoleCylinderRadiusM = 0.45;
+    constexpr int kPoleCylinderSegments = 20;
 
     JsonObject f = features.add<JsonObject>();
     f["type"] = "Feature";
@@ -215,37 +308,51 @@ static void append_pole_extrusion(JsonArray features, double lat, double lon, ui
     geom["type"] = "Polygon";
     JsonArray rings = geom["coordinates"].to<JsonArray>();
     JsonArray ring = rings.add<JsonArray>();
-    auto corner = [&](double la, double lo) {
-        JsonArray pt = ring.add<JsonArray>();
-        pt.add(lo);
-        pt.add(la);
-    };
-    corner(lat - dLat, lon - dLon);
-    corner(lat - dLat, lon + dLon);
-    corner(lat + dLat, lon + dLon);
-    corner(lat + dLat, lon - dLon);
-    corner(lat - dLat, lon - dLon);
+    append_circle_footprint_ring(ring, lat, lon, kPoleCylinderRadiusM, kPoleCylinderSegments);
+}
+
+/** Ground circuit LineString from KMZ-derived path (lon, lat, alt); z uses altitude if > 0.5 m else 6 m. */
+static void append_circuit_line_from_kmz(JsonArray features, const double (*pts)[3], size_t n, const char* name,
+                                         uint8_t circuitId) {
+    if (n < 2) {
+        return;
+    }
+    JsonObject lineFeature = features.add<JsonObject>();
+    lineFeature["type"] = "Feature";
+    lineFeature["id"] = String("cln-") + String((int)circuitId);
+    JsonObject props = lineFeature["properties"].to<JsonObject>();
+    props["assetType"] = "line";
+    props["name"] = name;
+    props["circuitId"] = circuitId;
+
+    JsonObject geom = lineFeature["geometry"].to<JsonObject>();
+    geom["type"] = "LineString";
+    JsonArray coords = geom["coordinates"].to<JsonArray>();
+    for (size_t k = 0; k < n; k++) {
+        JsonArray c = coords.add<JsonArray>();
+        c.add(pts[k][0]); // lon
+        c.add(pts[k][1]); // lat
+        const double z = (pts[k][2] > 0.5) ? pts[k][2] : 6.0;
+        c.add(z);
+    }
+}
+
+/** Aerial LV ribbons along consecutive vertices of a KMZ path. */
+static void append_circuit_air_along_kmz(JsonArray features, const double (*pts)[3], size_t n, const char* ribbonName,
+                                         uint8_t circuitId) {
+    for (size_t k = 0; k + 1 < n; k++) {
+        append_ribbon_segment(features, pts[k][1], pts[k][0], pts[k + 1][1], pts[k + 1][0], 0.35, 4.0f, 4.4f, "courtAir",
+                              ribbonName, circuitId, (uint16_t)k);
+    }
 }
 
 static void append_geojson(JsonArray features) {
-    {
-        JsonObject lineFeature = features.add<JsonObject>();
-        lineFeature["type"] = "Feature";
-        JsonObject props = lineFeature["properties"].to<JsonObject>();
-        props["assetType"] = "line";
-        props["name"] = "Court feeder";
-
-        JsonObject geom = lineFeature["geometry"].to<JsonObject>();
-        geom["type"] = "LineString";
-        JsonArray coords = geom["coordinates"].to<JsonArray>();
-
-        JsonArray c0 = coords.add<JsonArray>();
-        c0.add(32.53545); c0.add(0.36270); c0.add(6.0);
-        JsonArray c1 = coords.add<JsonArray>();
-        c1.add(32.53605); c1.add(0.36225); c1.add(6.0);
-    }
-    append_ribbon_segment(features, 0.36270, 32.53545, 0.36225, 32.53605, 0.45, 5.6f, 6.05f, "lineAir",
-                          "Feeder aerial");
+    append_circuit_line_from_kmz(features, kCircuitKmz1Points, kCircuitKmz1PointCount, "Circuit 1", 0);
+    append_circuit_air_along_kmz(features, kCircuitKmz1Points, kCircuitKmz1PointCount, "Circuit 1 LV", 0);
+    append_circuit_line_from_kmz(features, kCircuitKmz2Points, kCircuitKmz2PointCount, "Circuit 2", 1);
+    append_circuit_air_along_kmz(features, kCircuitKmz2Points, kCircuitKmz2PointCount, "Circuit 2 LV", 1);
+    append_circuit_line_from_kmz(features, kCircuitKmz3Points, kCircuitKmz3PointCount, "Circuit 3", 2);
+    append_circuit_air_along_kmz(features, kCircuitKmz3Points, kCircuitKmz3PointCount, "Circuit 3 LV", 2);
 
     for (uint8_t board = 0; board < kBoards; board++) {
         double centerLon = 0.0;
@@ -262,7 +369,7 @@ static void append_geojson(JsonArray features) {
         JsonObject courtProps = courtFeature["properties"].to<JsonObject>();
         courtProps["assetType"] = "court";
         courtProps["boardId"] = board;
-        courtProps["name"] = "Ssezibwa Homes Court";
+        courtProps["name"] = "Site outline (all houses)";
         JsonObject courtGeom = courtFeature["geometry"].to<JsonObject>();
         courtGeom["type"] = "LineString";
         JsonArray courtCoords = courtGeom["coordinates"].to<JsonArray>();
@@ -276,12 +383,6 @@ static void append_geojson(JsonArray features) {
         p0.add(kHouseLatLon[0][1]);
         p0.add(kHouseLatLon[0][0]);
         p0.add(0.5f);
-
-        for (uint8_t i = 0; i < kChannelsPerBoard; i++) {
-            const uint8_t j = (i + 1) % kChannelsPerBoard;
-            append_ribbon_segment(features, kHouseLatLon[i][0], kHouseLatLon[i][1], kHouseLatLon[j][0],
-                                  kHouseLatLon[j][1], 0.35, 4.0f, 4.4f, "courtAir", "Court LV loop");
-        }
 
         JsonObject poleFeature = features.add<JsonObject>();
         poleFeature["type"] = "Feature";
@@ -348,6 +449,8 @@ static String build_dashboard_json() {
     JsonArray features = geojson["features"].to<JsonArray>();
     append_geojson(features);
 
+    mqtt_fill_dashboard_relay_config(doc["mqttRelay"].to<JsonObject>());
+
     JsonArray boards = doc["boards"].to<JsonArray>();
     for (uint8_t board = 0; board < kBoards; board++) {
         JsonObject boardObj = boards.add<JsonObject>();
@@ -359,9 +462,32 @@ static String build_dashboard_json() {
         for (uint8_t channel = 0; channel < kChannelsPerBoard; channel++) {
             JsonObject meter = meters.add<JsonObject>();
             meter["meterId"] = channel;
-            meter["relayChannel"] = channel;
             meter["tenantLabel"] = kTenantLabels[channel];
             meter["relayState"] = relayShadow[board][channel];
+            uint8_t ssrCh = 255;
+            const char* role = "";
+            if (channel == 0) {
+                ssrCh = 0;
+                role = "primary";
+            } else if (channel == 1 || channel == 2) {
+                ssrCh = 1;
+                role = "secondary";
+            } else if (channel == 3) {
+                ssrCh = 2;
+                role = "primary";
+            } else if (channel >= 4 && channel <= 7) {
+                ssrCh = 3;
+                role = "secondary";
+            } else if (channel == 8) {
+                ssrCh = 4;
+                role = "primary";
+            } else {
+                ssrCh = 5;
+                role = "secondary";
+            }
+            meter["ssrChannel"] = ssrCh;
+            meter["circuitRole"] = role;
+            meter["relayChannel"] = ssrCh;
             meter["dailyKwhTotal"] = daily_kwh_total(board, channel);
 
             const int ct = static_cast<int>(channel) % 6;
@@ -380,6 +506,51 @@ static String build_dashboard_json() {
                 history.add(simulated_kwh(board, channel, hour));
             }
         }
+
+        JsonArray tenantHouseholds = boardObj["tenantHouseholds"].to<JsonArray>();
+        struct HouseholdUi {
+            const char* title;
+            uint8_t priCh;
+            uint8_t secCh;
+            uint8_t priHouse;
+            uint8_t secHouses[5];
+            uint8_t secCount;
+        };
+        static const HouseholdUi kHouseholds[] = {
+            {"Household 1 — Houses 1-3", 0, 1, 0, {1, 2, 0, 0, 0}, 2},
+            {"Household 2 — Houses 4-8", 2, 3, 3, {4, 5, 6, 7, 0}, 4},
+            {"Household 3 — Houses 9-10", 4, 5, 8, {9, 0, 0, 0, 0}, 1},
+        };
+        for (unsigned hi = 0; hi < 3; hi++) {
+            const HouseholdUi& h = kHouseholds[hi];
+            JsonObject hh = tenantHouseholds.add<JsonObject>();
+            hh["householdId"] = (int)hi;
+            hh["title"] = h.title;
+
+            JsonObject pri = hh["primary"].to<JsonObject>();
+            pri["label"] = "Primary";
+            pri["relayChannel"] = h.priCh;
+            pri["relayState"] = ssr_channel_state_from_shadow(board, h.priCh);
+            JsonArray priIds = pri["houseIds"].to<JsonArray>();
+            priIds.add(h.priHouse);
+            pri["summary"] = String(kTenantLabels[h.priHouse]);
+
+            JsonObject sec = hh["secondary"].to<JsonObject>();
+            sec["label"] = "Secondary";
+            sec["relayChannel"] = h.secCh;
+            sec["relayState"] = ssr_channel_state_from_shadow(board, h.secCh);
+            JsonArray secIds = sec["houseIds"].to<JsonArray>();
+            String sum;
+            for (uint8_t k = 0; k < h.secCount; k++) {
+                const uint8_t hid = h.secHouses[k];
+                secIds.add(hid);
+                if (sum.length()) {
+                    sum += ", ";
+                }
+                sum += kTenantLabels[hid];
+            }
+            sec["summary"] = sum;
+        }
     }
 
     String payload;
@@ -388,8 +559,8 @@ static String build_dashboard_json() {
 }
 
 static bool set_relay_state(uint8_t board, uint8_t channel, bool state) {
-    if (board >= kBoards || channel >= kChannelsPerBoard) {
-        Serial.printf("Relay API reject: board=%u channel=%u out of range\n", board, channel);
+    if (board >= kBoards || channel >= kCircuitRelayCount) {
+        Serial.printf("Relay API reject: board=%u SSR=%u (valid SSR 0-%u)\n", board, channel, (unsigned)(kCircuitRelayCount - 1));
         return false;
     }
     if (board == 0 && channel < kHardwareRelayChannels) {
@@ -398,9 +569,13 @@ static bool set_relay_state(uint8_t board, uint8_t channel, bool state) {
             return false;
         }
     }
-    relayShadow[board][channel] = state;
-    Serial.printf("Relay API applied: board=%u channel=%u state=%u\n", board, channel, state ? 1 : 0);
+    apply_circuit_state_to_house_shadow(board, channel, state);
+    Serial.printf("Relay API applied: board=%u SSR=%u state=%u (houses updated)\n", board, channel, state ? 1 : 0);
     return true;
+}
+
+bool apply_dashboard_relay(uint8_t board, uint8_t channel, bool state) {
+    return set_relay_state(board, channel, state);
 }
 
 static void setup_webserver() {
@@ -409,13 +584,13 @@ static void setup_webserver() {
         return;
     }
 
-    for (uint8_t channel = 0; channel < kChannelsPerBoard; channel++) {
-        if (channel < kHardwareRelayChannels) {
-            relayShadow[0][channel] = get_i2c_ssr_channel(channel);
-        } else {
-            relayShadow[0][channel] = false;
-        }
-        relayShadow[1][channel] = false;
+    sync_house_shadow_from_hardware_ssr(0);
+    /** Lab default: all tenant SSR circuits (0-5) start ON; dashboard toggles only change future behavior in UI. */
+    for (uint8_t ch = 0; ch < kCircuitRelayCount; ch++) {
+        (void)set_relay_state(0, ch, true);
+    }
+    for (uint8_t h = 0; h < kChannelsPerBoard; h++) {
+        relayShadow[1][h] = false;
     }
 
     // API routes first — must match before the static file handler.
@@ -429,6 +604,10 @@ static void setup_webserver() {
             house = request->getParam("house")->value().toInt();
         }
         request->send(200, "application/json", circuitsetup_api_json(house));
+    });
+
+    server.on("/api/circuitsetup-spi-probe", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "application/json", circuitsetup_spi_probe_json());
     });
 
     server.on("/api/relay", HTTP_GET, [](AsyncWebServerRequest *request) {

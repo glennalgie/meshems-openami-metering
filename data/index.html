@@ -46,6 +46,66 @@
       border: 2px solid #fee2e2;
       box-shadow: 0 0 0 1px #7f1d1d inset;
     }
+    button.relay-btn-sm {
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .circuit-pair-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+      padding: 8px 6px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .circuit-pair-row:last-child { border-bottom: none; }
+    .circuit-block {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      border-radius: 8px;
+      padding: 6px 8px;
+      border: 1px solid #334155;
+    }
+    .circuit-block--priority {
+      border-left: 3px solid #f97316;
+      background: rgba(249, 115, 22, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.12);
+    }
+    .circuit-block--secondary {
+      border-left: 3px solid #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.1);
+    }
+    .circuit-block .cb-head {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #fdba74;
+      line-height: 1.15;
+    }
+    .circuit-block--secondary .cb-head {
+      color: #7dd3fc;
+      font-weight: 600;
+    }
+    .circuit-block .cb-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 2px;
+      line-height: 1.2;
+    }
+    .circuit-block .cb-meta {
+      font-size: 9px;
+      color: #64748b;
+      margin-top: 3px;
+      line-height: 1.2;
+      word-break: break-word;
+    }
     #historyChart { width: 100%; max-height: 220px; }
     .legend { display: flex; gap: 8px; font-size: 12px; margin-top: 8px; color: #cbd5e1; }
     .cs-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
@@ -161,11 +221,6 @@
       <h1>StreetPoleEMS Dashboard</h1>
       <div id="siteMeta" class="muted">Loading site...</div>
 
-      <div class="card">
-        <h2>Selection</h2>
-        <div id="selectionSummary" class="muted">Click a pole or house on the map.</div>
-      </div>
-
       <div id="mapLayersCard" class="card" style="display:none" aria-hidden="true">
         <h2>Map layers</h2>
         <div class="muted">Draw order: top of list paints last (on top). Bars on the left = same stack bottom→top.</div>
@@ -178,16 +233,31 @@
 
       <div class="card">
         <h2>Daily House Timeline</h2>
-        <div class="muted" style="font-size:12px;margin-bottom:6px">Simulated kWh/hour — all tenants stacked; thicker line = selected household.</div>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">
+          Full <strong>24h</strong> clock (0–23). <strong>“Now”</strong> is at mid‑afternoon (~14:00), between the usual morning and evening demand peaks — left is earlier today (all circuits stacked as if ON), right is the rest of the day.
+          <strong>Right</strong>: stacked <em>fills</em> only when that SSR is ON; each circuit still draws its projected <em>line</em> when OFF.
+          <strong>Stack</strong>: Primary / Priority (warm) at the bottom, Secondary (cool) above.
+        </div>
         <canvas id="historyChart"></canvas>
       </div>
 
       <div class="card">
         <h2>Tenant Controls</h2>
-        <div class="muted">Board 0 channels 0-7 drive the IoTMug I2C SSR board (tenant supply).</div>
-        <div class="map-help">Houses: <strong>● Meter</strong> = CircuitSetup chip for that CT online; <strong>○ Meter</strong> = offline. <strong>Green / red</strong> = tenant SSR ON / OFF (brighter when meter online, muted when offline). <strong>Cyan ring / cyan 3D</strong> = CT current on that channel.</div>
         <div id="relayStatus" class="muted"></div>
         <div id="meterList" class="meter-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>Selection</h2>
+        <div id="selectionSummary" class="muted">
+          Click a <strong>house marker</strong> to select a tenant — the map highlights that household’s LV wires and aerial path, and the hub pole.
+          Use the button below for CircuitSetup CT charts (no longer opens automatically).
+        </div>
+        <div style="margin-top:10px">
+          <button type="button" id="openCircuitDetailsBtn" style="padding:6px 12px;font-size:13px;border-radius:8px;border:none;cursor:pointer;font-weight:600;background:#334155;color:#e2e8f0">
+            Open CT / meter details
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -199,7 +269,7 @@
         <h2 id="csModalTitle">CircuitSetup CT (per house)</h2>
         <button type="button" id="circuitSetupModalClose" class="cs-modal-close" aria-label="Close">×</button>
       </div>
-      <div id="csSummary" class="muted">Select a house on the map or a tenant row to open this dialog.</div>
+      <div id="csSummary" class="muted">Use the Selection card button, or pick a tenant first then open here for CT charts.</div>
       <div class="cs-charts">
         <div class="cs-chart-wrap">
           <h3>Last ~10 minutes (1 s samples)</h3>
@@ -217,6 +287,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <script>
     /** Free vector basemap (no token). OpenFreeMap serves JSON at /styles/{name} — not .../style.json. */
     const MAPLIBRE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
@@ -242,16 +313,81 @@
     let chartCs30s;
     let lastBounds;
     let layerStackUiDone = false;
+    let relayMqttClient = null;
+    let relayMqttConnecting = null;
+
+    function ensureRelayMqtt() {
+      const mr = state.payload && state.payload.mqttRelay;
+      if (!mr || !mr.wsUrl || !mr.cmdTopic) {
+        return Promise.reject(new Error("No mqttRelay in dashboard JSON (update firmware + uploadfs)"));
+      }
+      if (typeof mqtt === "undefined") {
+        return Promise.reject(new Error("MQTT library failed to load"));
+      }
+      if (relayMqttClient && relayMqttClient.connected) {
+        return Promise.resolve(relayMqttClient);
+      }
+      if (relayMqttConnecting) {
+        return relayMqttConnecting;
+      }
+      relayMqttConnecting = new Promise((resolve, reject) => {
+        const c = mqtt.connect(mr.wsUrl, {
+          clientId: "spdash-" + Math.random().toString(16).slice(2, 10),
+          reconnectPeriod: 5000
+        });
+        const t = setTimeout(() => {
+          relayMqttConnecting = null;
+          try {
+            c.end(true);
+          } catch (e) { /* ignore */ }
+          reject(new Error("MQTT connect timeout"));
+        }, 20000);
+        c.on("connect", () => {
+          clearTimeout(t);
+          relayMqttConnecting = null;
+          relayMqttClient = c;
+          resolve(c);
+        });
+        c.on("error", (err) => {
+          clearTimeout(t);
+          relayMqttConnecting = null;
+          reject(err || new Error("MQTT error"));
+        });
+      });
+      return relayMqttConnecting;
+    }
+
+    function publishRelayMqtt(board, channel, on) {
+      const mr = state.payload.mqttRelay;
+      const payload = JSON.stringify({
+        cmd: "relay",
+        board: Number(board),
+        channel: Number(channel),
+        state: !!on
+      });
+      return ensureRelayMqtt().then(
+        (client) =>
+          new Promise((resolve, reject) => {
+            client.publish(mr.cmdTopic, payload, { qos: 0 }, (err) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve();
+              }
+            });
+          })
+      );
+    }
 
     const MAP_LAYER_STACK_TOP_FIRST = [
       { id: "house-label-layer", label: "House labels", color: "#f8fafc" },
-      { id: "house-layer", label: "House nodes (pick targets)", color: "#22c55e" },
-      { id: "line-air-ribbon", label: "Feeder aerial (3D)", color: "#f59e0b" },
+      { id: "house-layer", label: "House markers (●)", color: "#22c55e" },
+      { id: "line-air-ribbon", label: "Circuit aerial (3D)", color: "#f59e0b" },
       { id: "court-air-ribbon", label: "Court aerial (3D)", color: "#fbbf24" },
-      { id: "pole-layer", label: "Pole marker", color: "#4ade80" },
+      { id: "pole-layer", label: "Street pole (icon)", color: "#4ade80" },
       { id: "pole-extrusion-3d", label: "Pole mast (3D)", color: "#166534" },
       { id: "house-extrusion-3d", label: "Houses (3D)", color: "#15803d" },
-      { id: "line-layer", label: "Feeder line (ground)", color: "#d97706" },
+      { id: "line-layer", label: "Circuit line (ground)", color: "#d97706" },
       { id: "court-layer", label: "Court path (ground)", color: "#ca8a04" },
       { id: "satellite", label: "MapLibre basemap (Liberty)", color: "#475569" }
     ];
@@ -322,12 +458,70 @@
           map.setFeatureState({ source: src, id: "pn-" + board.boardId }, { hubLive: hub });
         } catch (e) { /* ignore */ }
       });
+      syncCircuitHighlight();
     }
 
-    const HISTORY_TENANT_COLORS = [
-      "#38bdf8", "#a78bfa", "#34d399", "#f472b6", "#fbbf24", "#2dd4bf",
-      "#fb7185", "#818cf8", "#4ade80", "#f97316"
+    /** Max aerial segments per circuit (KMZ paths); extra ids are no-ops. */
+    const CIRCUIT_AIR_SEGMENTS_MAX = 24;
+
+    function syncCircuitHighlight() {
+      if (!map || !mapInitialized || !state.payload) {
+        return;
+      }
+      const src = "utility-geojson";
+      const c = householdIndexForMeterId(state.selectedMeter);
+      const boardId = Number(state.selectedBoard);
+      for (let i = 0; i < 3; i++) {
+        const hi = i === c ? 1 : 0;
+        try {
+          map.setFeatureState({ source: src, id: "cln-" + i }, { circuitHi: hi });
+        } catch (e) { /* ignore */ }
+        for (let s = 0; s < CIRCUIT_AIR_SEGMENTS_MAX; s++) {
+          try {
+            map.setFeatureState({ source: src, id: "car-" + i + "-s" + s }, { circuitHi: hi });
+          } catch (e) { /* ignore */ }
+        }
+      }
+      try {
+        map.setFeatureState({ source: src, id: "pn-" + boardId }, { poleHi: 1 });
+        map.setFeatureState({ source: src, id: "ps-" + boardId }, { poleHi: 1 });
+      } catch (e) { /* ignore */ }
+    }
+
+    /** Household → meter ids (matches firmware SSR groupings). */
+    const HOUSEHOLD_CIRCUIT_METERS = [
+      { label: "H1", pri: [0], sec: [1, 2] },
+      { label: "H2", pri: [3], sec: [4, 5, 6, 7] },
+      { label: "H3", pri: [8], sec: [9] }
     ];
+    const CHART_PRI_WARM = ["#fb923c", "#f97316", "#ea580c"];
+    const CHART_SEC_COLD = ["#38bdf8", "#22d3ee", "#818cf8"];
+
+    function householdIndexForMeterId(meterId) {
+      const m = Number(meterId);
+      if (m <= 2) {
+        return 0;
+      }
+      if (m <= 7) {
+        return 1;
+      }
+      return 2;
+    }
+
+    function sumHistoryKwhByHour(meters, meterIds) {
+      const hours = Array(24).fill(0);
+      for (let j = 0; j < meterIds.length; j++) {
+        const mid = meterIds[j];
+        const meter = meters.find((x) => Number(x.meterId) === Number(mid));
+        if (!meter || !Array.isArray(meter.historyKwhByHour)) {
+          continue;
+        }
+        for (let h = 0; h < 24; h++) {
+          hours[h] += Number(meter.historyKwhByHour[h]) || 0;
+        }
+      }
+      return hours;
+    }
 
     function hexToRgba(hex, alpha) {
       const h = hex.replace("#", "");
@@ -337,12 +531,92 @@
       return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
     }
 
+    /** Hour-of-day indices 0..23. Past = hours before split; future = split..23. Split ~14 = mid‑afternoon between typical peaks. */
+    const HISTORY_DAY_HOURS = 24;
+    const HISTORY_NOW_SPLIT = 14;
+
+    function historyTimelineLabels() {
+      return Array.from({ length: HISTORY_DAY_HOURS }, (_, h) => h + "h");
+    }
+
+    function relayChannelOn(board, ssrCh) {
+      const ch = Number(ssrCh);
+      const raw = board.tenantHouseholds;
+      if (Array.isArray(raw) && raw.length) {
+        for (let hi = 0; hi < raw.length; hi++) {
+          const hh = raw[hi];
+          const pri = hh.primary || hh.priority;
+          const sec = hh.secondary;
+          if (pri && Number(pri.relayChannel) === ch) {
+            return !!pri.relayState;
+          }
+          if (sec && Number(sec.relayChannel) === ch) {
+            return !!sec.relayState;
+          }
+        }
+      }
+      const legacy = board.feederRelays;
+      if (Array.isArray(legacy) && legacy.length) {
+        for (let fi = 0; fi < legacy.length; fi++) {
+          const fr = legacy[fi];
+          const pri = fr.priority;
+          const sec = fr.secondary;
+          if (pri && Number(pri.relayChannel) === ch) {
+            return !!pri.relayState;
+          }
+          if (sec && Number(sec.relayChannel) === ch) {
+            return !!sec.relayState;
+          }
+        }
+      }
+      const m = board.meters.find((x) => Number(x.relayChannel) === ch);
+      return m ? !!m.relayState : true;
+    }
+
+    const historyNowGuide = {
+      id: "historyNowGuide",
+      afterDatasetsDraw(chart) {
+        const xScale = chart.scales.x;
+        if (!xScale || chart.data.labels.length < HISTORY_NOW_SPLIT + 1) {
+          return;
+        }
+        const i0 = HISTORY_NOW_SPLIT - 1;
+        const i1 = HISTORY_NOW_SPLIT;
+        const x0 = xScale.getPixelForTick(i0);
+        const x1 = xScale.getPixelForTick(i1);
+        if (!Number.isFinite(x0) || !Number.isFinite(x1)) {
+          return;
+        }
+        const xMid = (x0 + x1) / 2;
+        const { top, bottom } = chart.chartArea;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.55)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xMid, top);
+        ctx.lineTo(xMid, bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("now", xMid, top + 11);
+        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
+        ctx.fillText("earlier", xMid - 40, top + 24);
+        ctx.fillText("rest of day", xMid + 48, top + 24);
+        ctx.restore();
+      },
+    };
+
     function buildChart() {
       const ctx = document.getElementById("historyChart").getContext("2d");
       chart = new Chart(ctx, {
         type: "line",
         data: {
-          labels: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0") + ":00"),
+          labels: historyTimelineLabels(),
           datasets: []
         },
         options: {
@@ -350,22 +624,59 @@
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: {
-              labels: { color: "#e2e8f0", boxWidth: 10, font: { size: 10 } },
+              onClick: () => {},
+              labels: {
+                color: "#e2e8f0",
+                boxWidth: 8,
+                font: { size: 9 },
+                padding: 4,
+                generateLabels(chart) {
+                  const ds = chart.data.datasets;
+                  const out = [];
+                  ds.forEach((d, i) => {
+                    if (!d.showInLegend) {
+                      return;
+                    }
+                    out.push({
+                      text: d.label,
+                      fillStyle: d.borderColor,
+                      strokeStyle: d.borderColor,
+                      lineWidth: 2,
+                      hidden: !chart.isDatasetVisible(i),
+                      datasetIndex: i
+                    });
+                  });
+                  return out;
+                }
+              },
               position: "bottom"
             },
             tooltip: { enabled: false }
+          },
+          elements: {
+            line: { borderJoinStyle: "round" },
+            point: { radius: 0, hoverRadius: 0 }
           },
           scales: {
             x: { ticks: { color: "#cbd5e1", maxRotation: 45 } },
             y: {
               ticks: { color: "#cbd5e1" },
-              title: { display: true, text: "kWh / hour (sim)", color: "#94a3b8" },
-              stacked: false
+              title: {
+                display: true,
+                text: "kWh / hour (sim) — 24h clock, now ~14h | Pri bottom, Sec top",
+                color: "#94a3b8"
+              },
+              stacked: true,
+              beginAtZero: true
             }
           }
-        }
+        },
+        plugins: [historyNowGuide]
       });
     }
+
+    /** Chart.js stack `order`: lower = nearer baseline. Priority SSRs (0,2,4) bottom; Secondary (1,3,5) on top. */
+    const HISTORY_STACK_ORDER_BY_CHANNEL = { 0: 0, 2: 1, 4: 2, 1: 3, 3: 4, 5: 5 };
 
     function updateHistoryChart() {
       if (!chart || !state.payload) {
@@ -375,22 +686,77 @@
       if (!board || !board.meters.length) {
         return;
       }
-      const n = board.meters.length;
-      chart.data.datasets = board.meters.map((m, idx) => {
-        const col = HISTORY_TENANT_COLORS[idx % HISTORY_TENANT_COLORS.length];
-        const isSel = Number(m.meterId) === Number(state.selectedMeter);
-        return {
-          label: m.tenantLabel || ("M" + m.meterId),
-          data: (m.historyKwhByHour || []).slice(),
+      const selHh = householdIndexForMeterId(state.selectedMeter);
+      const recN = HISTORY_NOW_SPLIT;
+      const datasets = [];
+
+      const pushPastFuture = (full, label, col, ssrCh, emphasis, stackOrder) => {
+        const on = relayChannelOn(board, ssrCh);
+        const leftData = full.map((v, h) => (h < recN ? v : null));
+        const rightLineData = full.map((v, h) => (h >= recN ? v : null));
+        const rightFillData = full.map((v, h) => {
+          if (h < recN) {
+            return null;
+          }
+          return on ? v : null;
+        });
+        const leftFill = hexToRgba(col, emphasis ? 0.5 : 0.34);
+        const rightFill = hexToRgba(col, emphasis ? 0.46 : 0.3);
+        const lineW = emphasis ? 2.35 : 1.12;
+        datasets.push({
+          showInLegend: true,
+          label: label,
+          data: leftData,
           borderColor: col,
-          backgroundColor: hexToRgba(col, isSel ? 0.22 : 0.1),
+          backgroundColor: leftFill,
           fill: true,
           tension: 0.28,
-          borderWidth: isSel ? 3.2 : 1.4,
+          borderWidth: emphasis ? 2.2 : 1.05,
           pointRadius: 0,
-          order: isSel ? 100 + idx : idx
-        };
-      });
+          stack: "rec",
+          order: stackOrder
+        });
+        datasets.push({
+          showInLegend: false,
+          label: label + " · future fill",
+          data: rightFillData,
+          borderColor: "transparent",
+          backgroundColor: rightFill,
+          fill: true,
+          tension: 0.28,
+          borderWidth: 0,
+          pointRadius: 0,
+          stack: "rec",
+          order: stackOrder
+        });
+        datasets.push({
+          showInLegend: false,
+          label: label + " · future line",
+          data: rightLineData,
+          borderColor: col,
+          backgroundColor: "transparent",
+          fill: false,
+          tension: 0.28,
+          borderWidth: lineW,
+          pointRadius: 0,
+          order: 96 + stackOrder
+        });
+      };
+
+      for (let i = 0; i < 3; i++) {
+        const cfg = HOUSEHOLD_CIRCUIT_METERS[i];
+        const full = sumHistoryKwhByHour(board.meters, cfg.pri);
+        const ch = [0, 2, 4][i];
+        pushPastFuture(full, cfg.label + " Pri", CHART_PRI_WARM[i], ch, selHh === i, HISTORY_STACK_ORDER_BY_CHANNEL[ch]);
+      }
+      for (let i = 0; i < 3; i++) {
+        const cfg = HOUSEHOLD_CIRCUIT_METERS[i];
+        const full = sumHistoryKwhByHour(board.meters, cfg.sec);
+        const ch = [1, 3, 5][i];
+        pushPastFuture(full, cfg.label + " Sec", CHART_SEC_COLD[i], ch, selHh === i, HISTORY_STACK_ORDER_BY_CHANNEL[ch]);
+      }
+      chart.data.labels = historyTimelineLabels();
+      chart.data.datasets = datasets;
       chart.update("none");
     }
 
@@ -488,6 +854,13 @@
       const close = () => closeCircuitSetupModal();
       document.getElementById("circuitSetupModalClose").addEventListener("click", close);
       document.getElementById("circuitSetupModalBackdrop").addEventListener("click", close);
+      const openBtn = document.getElementById("openCircuitDetailsBtn");
+      if (openBtn) {
+        openBtn.addEventListener("click", () => {
+          openCircuitSetupModal();
+          refreshCircuitSetup();
+        });
+      }
       document.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape" && state.circuitSetupModalOpen) {
           close();
@@ -598,19 +971,66 @@
             : ((Number(meter.meterId) % 6) + 6) % 6;
         const meterChipOk = chipsOk[Math.floor(ctCh / 3)] === true;
         const meterBadge = meterChipOk ? " [Meter online]" : " [Meter offline]";
+        const roleDisp =
+          meter.circuitRole === "primary"
+            ? "Priority"
+            : meter.circuitRole === "secondary"
+              ? "Secondary"
+              : meter.circuitRole || "?";
         document.getElementById("selectionSummary").textContent =
           "Board " + state.selectedBoard + " | " + meter.tenantLabel + " | Meter " + meter.meterId + meterBadge + ctBadge +
-          " | Daily " + meter.dailyKwhTotal.toFixed(2) + " kWh (sim)" + liveLine + " | Tenant SSR " + (meter.relayState ? "ON" : "OFF");
+          " | Daily " + meter.dailyKwhTotal.toFixed(2) + " kWh (sim)" + liveLine +
+          " | SSR ch" +
+          (meter.relayChannel != null ? meter.relayChannel : "?") +
+          " (" +
+          roleDisp +
+          ") " +
+          (meter.relayState ? "ON" : "OFF");
         if (state.circuitSetupModalOpen) {
           refreshCircuitSetup();
         }
       } else {
         document.getElementById("selectionSummary").textContent =
-          "Board " + state.selectedBoard + " — click a house on the map or a row in Tenant Controls.";
+          "Board " + state.selectedBoard + " — click a house marker on the map, or use Open CT / meter details.";
       }
       updateHistoryChart();
       syncMeterFeatureState();
       updateCircuitSetupModalVisibility();
+    }
+
+    function wireRelayButton(btn, statusEl, boardId, relayChannel, currentOn, labelForStatus, compact) {
+      btn.className = (currentOn ? "turn-off" : "turn-on") + (compact ? " relay-btn-sm" : "");
+      btn.textContent = currentOn ? "TURN OFF" : "TURN ON";
+      btn.onclick = async (ev) => {
+        ev.stopPropagation();
+        const next = currentOn ? 0 : 1;
+        const mr = state.payload && state.payload.mqttRelay;
+        const useMqtt = mr && mr.wsUrl && mr.cmdTopic && typeof mqtt !== "undefined";
+        try {
+          if (useMqtt) {
+            await publishRelayMqtt(boardId, relayChannel, next);
+            statusEl.className = "status-ok";
+            statusEl.textContent =
+              "MQTT → " + mr.cmdTopic + " | " + labelForStatus + " SSR " + relayChannel + " => " + (next ? "ON" : "OFF");
+            await new Promise((r) => setTimeout(r, 400));
+            await refreshData();
+          } else {
+            const rsp = await fetch("/api/relay?board=" + boardId + "&channel=" + relayChannel + "&state=" + next);
+            const data = await rsp.json();
+            if (!rsp.ok || !data.ok) {
+              throw new Error(data.error || ("HTTP " + rsp.status));
+            }
+            statusEl.className = "status-ok";
+            statusEl.textContent =
+              "HTTP /api/relay | " + labelForStatus + " SSR " + data.channel + " => " + (data.state ? "ON" : "OFF") +
+              " (mask " + data.mask + ")";
+            await refreshData();
+          }
+        } catch (err) {
+          statusEl.className = "status-err";
+          statusEl.textContent = "Relay failed: " + err.message;
+        }
+      };
     }
 
     function renderRelays() {
@@ -620,6 +1040,90 @@
       }
       const list = document.getElementById("meterList");
       list.innerHTML = "";
+
+      const status = document.getElementById("relayStatus");
+      const rawHh = board.tenantHouseholds;
+      const legacy = board.feederRelays;
+      const households =
+        Array.isArray(rawHh) && rawHh.length
+          ? rawHh
+          : Array.isArray(legacy) && legacy.length
+            ? legacy.map((fr) => ({
+                householdId: fr.feederId,
+                title: fr.feederName,
+                primary: fr.priority,
+                secondary: fr.secondary,
+              }))
+            : [];
+      if (households.length) {
+        households.forEach((hh) => {
+          const card = document.createElement("div");
+          card.className = "feeder-relay-card";
+          card.style.cssText =
+            "border:1px solid #334155;border-radius:10px;padding:10px;margin-bottom:12px;background:#111827;";
+          const title = document.createElement("div");
+          title.style.cssText = "font-weight:700;margin-bottom:8px;color:#e2e8f0;";
+          const hid = hh.householdId != null ? Number(hh.householdId) : 0;
+          title.textContent = hh.title || "Household " + (hid + 1);
+          card.appendChild(title);
+
+          const pri = hh.primary || hh.priority;
+          const sec = hh.secondary;
+          const pairRow = document.createElement("div");
+          pairRow.className = "circuit-pair-row";
+
+          const makeBlock = (circ, roleKey, headText, hintText) => {
+            const wrap = document.createElement("div");
+            wrap.className =
+              "circuit-block circuit-block--" + (roleKey === "priority" ? "priority" : "secondary");
+            const left = document.createElement("div");
+            left.style.minWidth = "0";
+            left.style.flex = "1";
+            const headEl = document.createElement("div");
+            headEl.className = "cb-head";
+            headEl.textContent = headText;
+            left.appendChild(headEl);
+            const subEl = document.createElement("div");
+            subEl.className = "cb-sub";
+            subEl.textContent = hintText;
+            left.appendChild(subEl);
+            const meta = document.createElement("div");
+            meta.className = "cb-meta";
+            if (!circ) {
+              meta.textContent = "—";
+              left.appendChild(meta);
+              wrap.appendChild(left);
+              return wrap;
+            }
+            meta.textContent = "SSR" + circ.relayChannel + " · " + (circ.summary || "");
+            left.appendChild(meta);
+            const btn = document.createElement("button");
+            const on = !!circ.relayState;
+            wireRelayButton(
+              btn,
+              status,
+              state.selectedBoard,
+              Number(circ.relayChannel),
+              on,
+              (hh.title || "Household " + (hid + 1)) + " · " + headText,
+              true
+            );
+            wrap.appendChild(left);
+            wrap.appendChild(btn);
+            return wrap;
+          };
+
+          pairRow.appendChild(
+            makeBlock(pri, "priority", "Priority", "Core — keep on if possible")
+          );
+          pairRow.appendChild(
+            makeBlock(sec, "secondary", "Secondary", "Shed first if needed")
+          );
+          card.appendChild(pairRow);
+          list.appendChild(card);
+        });
+        return;
+      }
 
       const chipsOk = state.payload.circuitSetupChipsOk || [];
       board.meters.forEach((meter) => {
@@ -649,30 +1153,11 @@
           row.classList.add("meter-row-selected");
         }
         const btn = document.createElement("button");
-        btn.className = meter.relayState ? "turn-off" : "turn-on";
-        btn.textContent = meter.relayState ? "TURN OFF" : "TURN ON";
-        btn.onclick = async (ev) => {
-          ev.stopPropagation();
-          const status = document.getElementById("relayStatus");
-          const next = meter.relayState ? 0 : 1;
-          try {
-            const rsp = await fetch("/api/relay?board=" + state.selectedBoard + "&channel=" + meter.relayChannel + "&state=" + next);
-            const data = await rsp.json();
-            if (!rsp.ok || !data.ok) {
-              throw new Error(data.error || ("HTTP " + rsp.status));
-            }
-            status.className = "status-ok";
-            status.textContent = "Applied board " + data.board + " ch " + data.channel + " => " + (data.state ? "ON" : "OFF") + " (mask " + data.mask + ")";
-            await refreshData();
-          } catch (err) {
-            status.className = "status-err";
-            status.textContent = "Tenant control failed: " + err.message;
-          }
-        };
+        wireRelayButton(btn, status, state.selectedBoard, Number(meter.relayChannel), !!meter.relayState, "Tenant");
         row.appendChild(btn);
         row.onclick = () => {
           state.selectedMeter = meter.meterId;
-          openCircuitSetupModal();
+          closeCircuitSetupModal();
           renderRelays();
           renderSelection();
         };
@@ -716,6 +1201,41 @@
       }
       if (!map.getSource(sourceId)) {
         map.addSource(sourceId, { type: "geojson", data: data });
+        (function addUtilityMapSprites() {
+          if (map.hasImage("pole-vertical")) {
+            return;
+          }
+          const w = 8;
+          const h = 40;
+          const data = new Uint8Array(w * h * 4);
+          const setPx = (x, y, r, g, b, a) => {
+            if (x < 0 || x >= w || y < 0 || y >= h) {
+              return;
+            }
+            const o = (y * w + x) * 4;
+            data[o] = r;
+            data[o + 1] = g;
+            data[o + 2] = b;
+            data[o + 3] = a;
+          };
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              setPx(x, y, 0, 0, 0, 0);
+            }
+          }
+          const trunkR = 22, trunkG = 101, trunkB = 52;
+          const capR = 74, capG = 222, capB = 128;
+          for (let y = 0; y < h - 8; y++) {
+            setPx(3, y, trunkR, trunkG, trunkB, 255);
+            setPx(4, y, trunkR, trunkG, trunkB, 255);
+          }
+          for (let y = h - 8; y < h; y++) {
+            for (let x = 1; x <= 6; x++) {
+              setPx(x, y, capR, capG, capB, 255);
+            }
+          }
+          map.addImage("pole-vertical", { width: w, height: h, data: data });
+        })();
         map.addLayer({
           id: "court-layer",
           type: "line",
@@ -728,63 +1248,108 @@
           type: "line",
           source: sourceId,
           filter: ["==", ["get", "assetType"], "line"],
-          paint: { "line-color": "#f59e0b", "line-width": 3, "line-opacity": 0.75 }
+          paint: {
+            "line-color": [
+              "case",
+              [">", ["coalesce", ["feature-state", "circuitHi"], 0], 0],
+              "#fde047",
+              "#78350f"
+            ],
+            "line-width": [
+              "case",
+              [">", ["coalesce", ["feature-state", "circuitHi"], 0], 0],
+              6,
+              2
+            ],
+            "line-opacity": [
+              "case",
+              [">", ["coalesce", ["feature-state", "circuitHi"], 0], 0],
+              1,
+              0.22
+            ]
+          }
         });
         map.addLayer({
           id: "pole-layer",
-          type: "circle",
+          type: "symbol",
           source: sourceId,
           filter: ["==", ["get", "assetType"], "streetPoleEMS"],
+          layout: {
+            "icon-image": "pole-vertical",
+            "icon-anchor": "bottom",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-size": [
+              "case",
+              [">", ["coalesce", ["feature-state", "poleHi"], 0], 0],
+              [
+                "case",
+                [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
+                1.28,
+                1.12
+              ],
+              [
+                "case",
+                [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
+                1.12,
+                0.92
+              ]
+            ]
+          },
           paint: {
-            "circle-radius": [
+            "icon-opacity": [
               "case",
-              [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
-              11,
-              6
-            ],
-            "circle-color": "#4ade80",
-            "circle-opacity": [
-              "case",
-              [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
-              0.55,
-              0.42
-            ],
-            "circle-stroke-width": [
-              "case",
-              [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
-              2,
-              0
-            ],
-            "circle-stroke-color": "#7dd3fc"
+              [">", ["coalesce", ["feature-state", "poleHi"], 0], 0],
+              [
+                "case",
+                [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
+                0.98,
+                0.88
+              ],
+              [
+                "case",
+                [">", ["coalesce", ["feature-state", "hubLive"], 0], 0],
+                0.72,
+                0.55
+              ]
+            ]
           }
         });
         map.addLayer({
           id: "house-layer",
-          type: "circle",
+          type: "symbol",
           source: sourceId,
           filter: ["==", ["get", "assetType"], "house"],
-          paint: {
-            "circle-radius": [
+          layout: {
+            "text-field": "\u25cf",
+            "text-font": ["Noto Sans Regular"],
+            "text-size": [
               "case",
               [">", ["coalesce", ["feature-state", "selected"], 0], 0],
               [
                 "case",
                 ["==", ["coalesce", ["feature-state", "meterOk"], 0], 0],
-                8,
+                20,
                 [">", ["coalesce", ["feature-state", "ctLive"], 0], 0],
-                9,
-                7
+                22,
+                18
               ],
               [
                 "case",
                 ["==", ["coalesce", ["feature-state", "meterOk"], 0], 0],
-                6,
+                15,
                 [">", ["coalesce", ["feature-state", "ctLive"], 0], 0],
-                7,
-                5
+                17,
+                13
               ]
             ],
-            "circle-color": [
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+            "text-rotation-alignment": "map",
+            "text-pitch-alignment": "map"
+          },
+          paint: {
+            "text-color": [
               "case",
               MAP_RELAY_ON,
               [
@@ -800,18 +1365,18 @@
                 "#ef4444"
               ]
             ],
-            "circle-opacity": 0.55,
-            "circle-stroke-width": [
+            "text-opacity": 0.88,
+            "text-halo-width": [
               "case",
               [">", ["coalesce", ["feature-state", "selected"], 0], 0],
-              4,
+              2.2,
               ["==", ["coalesce", ["feature-state", "meterOk"], 0], 0],
-              3,
+              1.6,
               [">", ["coalesce", ["feature-state", "ctLive"], 0], 0],
-              3,
-              1
+              1.6,
+              0.6
             ],
-            "circle-stroke-color": [
+            "text-halo-color": [
               "case",
               [">", ["coalesce", ["feature-state", "selected"], 0], 0],
               "#fef08c",
@@ -890,10 +1455,20 @@
           source: sourceId,
           filter: ["==", ["get", "assetType"], "poleExtrusion"],
           paint: {
-            "fill-extrusion-color": "#166534",
+            "fill-extrusion-color": [
+              "case",
+              [">", ["coalesce", ["feature-state", "poleHi"], 0], 0],
+              "#22c55e",
+              "#166534"
+            ],
             "fill-extrusion-base": ["get", "extrudeBase"],
             "fill-extrusion-height": ["get", "extrudeHeight"],
-            "fill-extrusion-opacity": 0.82
+            "fill-extrusion-opacity": [
+              "case",
+              [">", ["coalesce", ["feature-state", "poleHi"], 0], 0],
+              0.94,
+              0.55
+            ]
           }
         });
         map.addLayer({
@@ -902,10 +1477,20 @@
           source: sourceId,
           filter: ["==", ["get", "assetType"], "courtAir"],
           paint: {
-            "fill-extrusion-color": "#fbbf24",
+            "fill-extrusion-color": [
+              "case",
+              [">", ["coalesce", ["feature-state", "circuitHi"], 0], 0],
+              "#fde047",
+              "#713f12"
+            ],
             "fill-extrusion-base": ["get", "extrudeBase"],
             "fill-extrusion-height": ["get", "extrudeHeight"],
-            "fill-extrusion-opacity": 0.92
+            "fill-extrusion-opacity": [
+              "case",
+              [">", ["coalesce", ["feature-state", "circuitHi"], 0], 0],
+              0.96,
+              0.18
+            ]
           }
         });
         map.addLayer({
@@ -941,7 +1526,7 @@
           const props = e.features[0].properties;
           state.selectedBoard = Number(props.boardId);
           state.selectedMeter = Number(props.meterId);
-          openCircuitSetupModal();
+          closeCircuitSetupModal();
           renderRelays();
           renderSelection();
         };

@@ -1,5 +1,13 @@
 # EIOT.Energy EMS DER/Site Controller Dev Kit - OpenAMI Metering Application
 
+## StreetPoleEMS web dashboard (lab demo)
+
+Operator UI served from the ESP32 (`data/index.html` over Wi‑Fi): 3D map, per-tenant relay controls, timelines, and MQTT command feedback. This capture is from the **Uganda-oriented lab simulation** stack (not a 1:1 production field deployment).
+
+[![StreetPoleEMS dashboard — latest lab UI](uganda_relay_latest.png)](uganda_relay_latest.png)
+
+**File:** [`uganda_relay_latest.png`](uganda_relay_latest.png) — earlier capture: [`uganda_relay_01.png`](uganda_relay_01.png)
+
 ## Overview
 A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management systems (EMS) with support for various communication protocols and peripherals. There are a few N16R8 40/42/44 pin layouts. Th EMS kit th \evariant where the rgbw led is top center mounted just below the WROOM ESP32S3 surface mount module. All variants will work except the pins layout differs. 
 
@@ -127,7 +135,7 @@ This branch now includes an operator-focused web dashboard served by the ESP32:
 - This dashboard is a **simulation interface running on lab equipment**.
 - It is designed to represent a **real field operating context** and field topology we are connected to through an operator relationship.
 - It is **not** a 1:1 production deployment of the field control stack.
-- In the current lab setup, only board 0 channels 0-7 are hardware-backed via the IoTMug I2C SSR; other channels/data are simulated.
+- In the current lab setup, **SSR channels 0–5** on board 0 drive the IoTMug bank (three tenant households × Primary + Secondary); **SSR 6–7** are unused in this mapping. Per-house data on the map still shows all 10 homes.
 
 ### What is shown in the dashboard
 
@@ -143,9 +151,9 @@ This branch now includes an operator-focused web dashboard served by the ESP32:
 ### GeoJSON notes
 
 - House points are emitted as proper GeoJSON Point coordinates in `[lon, lat, z]` order.
-- Court/path and feeder lines are emitted as LineString features.
+- Site outline (`court`) and **three circuit** `LineString`s come from **`Circuit1.kmz`**, **`Circuit2.kmz`**, and **`Circuit3.kmz`** (Google Earth paths). Each path is converted at build time into `include/circuit_paths_generated.h` (run `python3 scripts/kmz_to_circuit_paths.py` manually, or rely on the PlatformIO `pre:` script). Aerial ribbon segments (`courtAir`) follow the same vertices.
 - The current implementation uses one StreetPoleEMS board with 10 house points for visualization.
-- Board 0 channels 0-7 are hardware-backed via IoTMug I2C SSR; channels 8-9 are currently simulated.
+- Relay API / MQTT `channel` is **SSR index 0–5** (not per-house index 0–9). Houses on the same secondary circuit share one SSR state on the map.
 
 ### Deployment gotcha: upload filesystem content
 
@@ -163,20 +171,17 @@ pio run -t upload   --upload-port /dev/cu.usbmodemXXXXX
 The current court/house layout in the dashboard is based on the Nearly Free Energy Sezibwa Homes site-layout page (Uganda), then represented in GeoJSON for this ESP32 dashboard workflow.
 
 - Source page: https://bookstack.nearlyfreeenergy.com/books/business/page/site-layout
-- In this repo, those house coordinates are embedded in `src/main.cpp` and exposed through `/api/dashboard`.
+- In this repo, house coordinates are embedded in `src/main.cpp` and exposed through `/api/dashboard`. LV circuit polylines are authored as KMZ next to `platformio.ini`, then baked into firmware as above.
 
 When updating site geometry, keep the source-of-truth process simple:
 
 1. Capture site coordinates (survey/GPS or engineering drawing export)
 2. Store as `lat,lon` source data
 3. Convert to GeoJSON output order `lon,lat`
-4. Validate by opening `/api/dashboard` and confirming house placement on satellite map
+4. For the three map circuits, edit `Circuit1.kmz`–`Circuit3.kmz` (one `LineString` path each), then rebuild so `circuit_paths_generated.h` updates
+5. Validate by opening `/api/dashboard` and confirming house placement on satellite map
 
-### Field screenshot (Uganda relay map dashboard)
-
-- Screenshot file: [`uganda_relay_01.png`](uganda_relay_01.png)
-
-![StreetPoleEMS Uganda relay map dashboard](uganda_relay_01.png)
+(Screenshot of this UI: see **StreetPoleEMS web dashboard** at the top of this README — [`uganda_relay_latest.png`](uganda_relay_latest.png).)
 
 ## Features
 This development kit supports multiple peripherals using the PlatformIO and Arduino framework:

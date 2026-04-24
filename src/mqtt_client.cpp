@@ -98,6 +98,7 @@ last_bandwidth_report_time  time in secs since last report
 #include <leakage_model_ivy41a.h>         // these are actioanable leakage sensor measurements based on Type B leakage
 #include <sunspec_model_1.h>
 #include <i2c_ssr_bank.h>
+#include <relay_control.h>
 #include <sunspec_model_11.h>    
 #include <ems_env_model.h>    
 #include "pins.h"
@@ -142,6 +143,35 @@ void generateTopics() {
   
   topic_cmd = topic_device;
   topic_cmd.concat("cmd");
+}
+
+String getCommandTopic() {
+  return topic_cmd;
+}
+
+static String mqtt_browser_ws_cache;
+
+static void build_mqtt_browser_ws_if_needed() {
+  if (mqtt_browser_ws_cache.length() > 0) {
+    return;
+  }
+  if (strlen(MQTT_USER) > 0) {
+    mqtt_browser_ws_cache = "wss://";
+    mqtt_browser_ws_cache += MQTT_USER;
+    mqtt_browser_ws_cache += ":";
+    mqtt_browser_ws_cache += MQTT_PW;
+    mqtt_browser_ws_cache += "@";
+    mqtt_browser_ws_cache += MQTT_SERVER;
+  } else {
+    mqtt_browser_ws_cache = "wss://";
+    mqtt_browser_ws_cache += MQTT_SERVER;
+  }
+}
+
+void mqtt_fill_dashboard_relay_config(JsonObject relayUi) {
+  build_mqtt_browser_ws_if_needed();
+  relayUi["wsUrl"] = mqtt_browser_ws_cache;
+  relayUi["cmdTopic"] = topic_cmd;
 }
 
 // -------------------------------------------------------------------
@@ -469,47 +499,116 @@ static void cmd_bms     (const JsonDocument&) { Serial.printf("matched \"bms\"\n
 static void cmd_inverter(const JsonDocument&) { Serial.printf("matched \"inverter\"\n"); }
 
 /**
- * Example relay payloads:
- * {"cmd":"relay","address":0,"kwh_limit":100.0}
- * {"cmd":"relay","address":3,"kw_limit":5.5}
- * {"cmd":"relay","address":7,"kwh_limit":250.0,"kw_limit":12.0}
- * {"cmd":"relay","address":3,"kwh_limit":80.0}
- * {"cmd":"relay","address":2,"state":"open"}
+ * Relay payloads:
+ *   Actuate (same as HTTP /api/relay): {"cmd":"relay","board":0,"channel":3,"state":true} — channel is SSR 0-5 (tenant household Primary/Secondary).
+ *   Legacy address: {"cmd":"relay","address":3,"state":1} or {"cmd":"relay","address":2,"state":"off"} (address 0-5 actuates feeder SSRs; 6-7 not mapped to houses)
+ *   Rules: {"cmd":"relay","address":0,"kwh_limit":100.0} ...
  */
-static void cmd_relay(const JsonDocument& doc) {
-    if (!doc["address"].is<int>()) {
-        Serial.println("relay cmd: missing or invalid 'address'");
-        return;
+static int relay_tolower_c(int c) {
+    return (c >= 'A' && c <= 'Z') ? (c + ('a' - 'A')) : c;
+}
+
+static bool relay_streq_i(const char* a, const char* b) {
+    while (*a && *b) {
+        if (relay_tolower_c((unsigned char)*a) != relay_tolower_c((unsigned char)*b)) {
+            return false;
+        }
+        a++;
+        b++;
     }
-    int address = doc["address"].as<int>();
-    if (address < 0 || address > 7) {
-        Serial.printf("relay cmd: address %d out of range 0-7\n", address);
+    return *a == *b;
+}
+
+static bool relay_parse_on_state(const JsonDocument& doc, bool* out_on) {
+    if (doc["state"].is<bool>()) {
+        *out_on = doc["state"].as<bool>();
+        return true;
+    }
+    if (doc["state"].is<int>()) {
+        *out_on = doc["state"].as<int>() != 0;
+        return true;
+    }
+    if (doc["state"].is<float>()) {
+        *out_on = doc["state"].as<float>() != 0.0f;
+        return true;
+    }
+    if (doc["state"].is<const char*>()) {
+        const char* s = doc["state"].as<const char*>();
+        if (s == nullptr || s[0] == '\0') {
+            return false;
+        }
+        if (!strcmp(s, "1") || relay_streq_i(s, "on") || relay_streq_i(s, "true") || relay_streq_i(s, "closed")) {
+            *out_on = true;
+            return true;
+        }
+        if (!strcmp(s, "0") || relay_streq_i(s, "off") || relay_streq_i(s, "false") || relay_streq_i(s, "open")) {
+            *out_on = false;
+            return true;
+        }
+        Serial.printf("relay cmd: unknown state string '%s'\n", s);
+        return false;
+    }
+    return false;
+}
+
+static void cmd_relay(const JsonDocument& doc) {
+    uint8_t board = 0;
+    uint8_t channel = 0;
+    bool have_loc = false;
+
+    if (doc["board"].is<int>() && doc["channel"].is<int>()) {
+        board = (uint8_t)doc["board"].as<int>();
+        channel = (uint8_t)doc["channel"].as<int>();
+        have_loc = true;
+    } else if (doc["address"].is<int>()) {
+        int address = doc["address"].as<int>();
+        if (address < 0 || address > 7) {
+            Serial.printf("relay cmd: address %d out of range 0-7\n", address);
+            return;
+        }
+        board = 0;
+        channel = (uint8_t)address;
+        have_loc = true;
+    }
+
+    if (!have_loc) {
+        Serial.println("relay cmd: need board+channel (ints) or address (0-7)");
         return;
     }
 
-    bool has_state = doc["state"].is<const char*>();
-    bool has_kwh   = doc["kwh_limit"].is<float>() || doc["kwh_limit"].is<int>();
-    bool has_kw    = doc["kw_limit"].is<float>()  || doc["kw_limit"].is<int>();
+    bool on = false;
+    const bool has_state = relay_parse_on_state(doc, &on);
+    const bool has_kwh = doc["kwh_limit"].is<float>() || doc["kwh_limit"].is<int>();
+    const bool has_kw = doc["kw_limit"].is<float>() || doc["kw_limit"].is<int>();
 
     if (has_state && (has_kwh || has_kw)) {
         Serial.println("relay cmd: 'state' is mutually exclusive with limit fields");
         return;
     }
-    if (!has_state && !has_kwh && !has_kw) {
-        Serial.println("relay cmd: must provide 'state', 'kwh_limit', or 'kw_limit'");
+    if (has_state) {
+        if (!apply_dashboard_relay(board, channel, on)) {
+            Serial.printf("relay cmd: apply failed board=%u channel=%u on=%d\n", board, channel, (int)on);
+        }
+        return;
+    }
+    if (!has_kwh && !has_kw) {
+        Serial.println("relay cmd: must provide state, kwh_limit, or kw_limit");
         return;
     }
 
-    if (has_state) {
-        // TODO: call set_ssr_channel() once implemented in i2c_ssr_bank
-        Serial.printf("relay cmd: ch %d state='%s' received (actuation not yet wired)\n",
-                      address, doc["state"].as<const char*>());
+    if (!doc["address"].is<int>()) {
+        Serial.println("relay cmd: limit rules require integer 'address' 0-7");
+        return;
+    }
+    const int address = doc["address"].as<int>();
+    if (address < 0 || address > 7) {
+        Serial.printf("relay cmd: address %d out of range 0-7\n", address);
         return;
     }
 
     RelayRule rule;
     rule.kwh_limit = has_kwh ? doc["kwh_limit"].as<float>() : -1.0f;
-    rule.kw_limit  = has_kw  ? doc["kw_limit"].as<float>()  : -1.0f;
+    rule.kw_limit = has_kw ? doc["kw_limit"].as<float>() : -1.0f;
     set_relay_rule((uint8_t)address, rule);
 
     Serial.println("relay rules:");

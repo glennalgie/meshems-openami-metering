@@ -48,6 +48,7 @@
 #endif
 
 #include "data_model.h"
+#include <ArduinoJson.h>
 
 // -------------------------------------------------------------------
 // Perform the background MQTT operations. Must be called in the main
@@ -82,5 +83,8 @@ boolean mqtt_connected();
 
 String uint64ToString(uint64_t input);
 String getCommandTopic();
+
+/** Fills wsUrl + cmdTopic for browser MQTT.js (WSS) tenant relay commands. */
+void mqtt_fill_dashboard_relay_config(JsonObject relayUi);
 
 #endif // _EMONESP_MQTT_H

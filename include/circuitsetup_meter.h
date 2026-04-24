@@ -15,3 +15,6 @@ float circuitsetup_phase_voltage(int ctChannel);
 void circuitsetup_sync_powerdata_readings();
 
 bool circuitsetup_chip_init_ok(int chipIndex);
+
+/** Destructive ATM90 SPI bring-up probe (soft reset per chip + CfgRegAccEn echo); re-runs begin() after. */
+String circuitsetup_spi_probe_json();

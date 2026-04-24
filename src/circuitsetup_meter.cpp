@@ -3,6 +3,7 @@
 #include <ATM90E32.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "pins.h"
@@ -17,6 +18,8 @@ static constexpr int kShortCap = 60;
 
 static ATM90E32 g_meters[kNumChips];
 static bool g_chipOk[kNumChips] = {false, false};
+static ATM90E32::Config g_lastMeterConfigs[kNumChips];
+static bool g_haveSavedMeterConfigs = false;
 
 static float g_long[kLongCap][kNumChannels];
 static float g_short[kShortCap][kNumChannels];
@@ -147,6 +150,8 @@ void setup_circuitsetup_meter() {
             config.phase[p].referenceVoltage = 120.0f;
             config.phase[p].referenceCurrent = 50.0f;
         }
+        g_lastMeterConfigs[i] = config;
+        g_haveSavedMeterConfigs = true;
         g_chipOk[i] = g_meters[i].begin(config);
         if (!g_chipOk[i]) {
             Serial.printf("CircuitSetup: ATM90E32 chip %d init failed (CS GPIO %d)\n", i, csPins[i]);
@@ -257,6 +262,7 @@ String circuitsetup_api_json(int houseMeterId) {
         "ATM90 uses global SPI on SCK/MISO/MOSI from pins.h (same bus as CAN/OLED). If initOk stays "
         "false: verify CS-A/CS-B GPIOs vs 865B netlist, 3V3 to meter, and line voltage inputs. "
         "Idle CS lines (CAN, OLED, both meter CS) must be high.";
+    diag["explicitSpiProbe"] = "GET /api/circuitsetup-spi-probe — soft-reset + register echo log per chip (see JSON).";
 
     JsonArray chips = diag["chips"].to<JsonArray>();
     const int csPins[kNumChips] = {CIRCUITSETUP_METER_CS_A, CIRCUITSETUP_METER_CS_B};
@@ -275,6 +281,263 @@ String circuitsetup_api_json(int houseMeterId) {
         c["frequencyHz"] = g_freq[i];
     }
 
+    String out;
+    serializeJson(doc, out);
+    return out;
+}
+
+namespace {
+
+/** Bit-for-bit same framing as ATM90E32::CommEnergyIC (ESP32: MODE3, 200 kHz). `rw`: 0=write, 1=read (library macros). */
+static uint16_t circuitsetup_atm90_raw_comm(int csPin, unsigned char rw, uint16_t addrIn, uint16_t valueIn) {
+    uint16_t value = valueIn;
+    uint16_t address = addrIn;
+    unsigned char* data = reinterpret_cast<unsigned char*>(&value);
+    unsigned char* addressData = reinterpret_cast<unsigned char*>(&address);
+    uint16_t output;
+    uint16_t swappedAddress;
+
+#if defined(ESP8266) || defined(ARDUINO_ARCH_ESP8266)
+    SPISettings settings(200000, MSBFIRST, SPI_MODE1);
+#elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_SAMD)
+    SPISettings settings(200000, MSBFIRST, SPI_MODE3);
+#else
+    SPISettings settings(200000, MSBFIRST, SPI_MODE0);
+#endif
+
+    output = static_cast<uint16_t>((value >> 8) | (value << 8));
+    value = output;
+
+    address |= static_cast<uint16_t>(rw) << 15;
+    swappedAddress = static_cast<uint16_t>((address >> 8) | (address << 8));
+    address = swappedAddress;
+
+#if !defined(ENERGIA)
+    SPI.beginTransaction(settings);
+#endif
+
+    digitalWrite(csPin, LOW);
+    delayMicroseconds(10);
+
+    for (byte i = 0; i < 2; i++) {
+        SPI.transfer(*addressData);
+        addressData++;
+    }
+
+    delayMicroseconds(4);
+
+    if (rw) {
+        for (byte i = 0; i < 2; i++) {
+            *data = SPI.transfer(0x00);
+            data++;
+        }
+    } else {
+        for (byte i = 0; i < 2; i++) {
+            SPI.transfer(*data);
+            data++;
+        }
+    }
+
+    digitalWrite(csPin, HIGH);
+    delayMicroseconds(10);
+
+#if !defined(ENERGIA)
+    SPI.endTransaction();
+#endif
+
+    output = static_cast<uint16_t>((value >> 8) | (value << 8));
+    return output;
+}
+
+static void circuitsetup_spi_bus_all_cs_high() {
+#if defined(CAN0_CS)
+    pinMode(CAN0_CS, OUTPUT);
+    digitalWrite(CAN0_CS, HIGH);
+#endif
+#if defined(DISPLAY_CS_PIN)
+    pinMode(DISPLAY_CS_PIN, OUTPUT);
+    digitalWrite(DISPLAY_CS_PIN, HIGH);
+#endif
+    const int csPins[kNumChips] = {CIRCUITSETUP_METER_CS_A, CIRCUITSETUP_METER_CS_B};
+    for (int i = 0; i < kNumChips; i++) {
+        pinMode(csPins[i], OUTPUT);
+        digitalWrite(csPins[i], HIGH);
+    }
+}
+
+static void spi_probe_step(JsonArray steps, const char* id, const char* phase, const char* rwLabel,
+                           uint16_t regAddr, uint16_t u16Result, const char* expectNote, bool ok) {
+    JsonObject o = steps.add<JsonObject>();
+    o["id"] = id;
+    o["phase"] = phase;
+    o["spiRw"] = rwLabel;
+    o["regAddr"] = regAddr;
+    char rh[8], vh[8];
+    snprintf(rh, sizeof rh, "0x%04X", static_cast<unsigned>(regAddr));
+    snprintf(vh, sizeof vh, "0x%04X", static_cast<unsigned>(u16Result));
+    o["regHex"] = rh;
+    o["returnU16"] = u16Result;
+    o["returnHex"] = vh;
+    o["expect"] = expectNote;
+    o["ok"] = ok;
+}
+
+}  // namespace
+
+String circuitsetup_spi_probe_json() {
+    JsonDocument doc;
+    doc["name"] = "CircuitSetup ATM90E32 explicit SPI probe";
+    doc["warning"] =
+        "Each chip sequence issues SOFTWARE RESET (reg 0x70 <= 0x789A) then CfgRegAccEn unlock test; metering "
+        "glitches during probe. Saved configs are re-applied via ATM90E32::begin() after each chip.";
+    doc["framing"] =
+        "Same as ATM90E32::CommEnergyIC (ESP32): SPI.beginTransaction(200000 Hz, MSBFIRST, SPI_MODE3); CS LOW "
+        "10us; shift 2 address bytes (addr with bit15=1 read / 0 write, bytes big-endian on wire after swap); "
+        "4us gap; 2 data bytes; CS HIGH 10us; return value is 16-bit word byte-swapped per library.";
+    doc["pins"]["spiSck"] = CIRCUITSETUP_SPI_SCK;
+    doc["pins"]["spiMosi"] = CIRCUITSETUP_SPI_MOSI;
+    doc["pins"]["spiMiso"] = CIRCUITSETUP_SPI_MISO;
+    doc["pins"]["meterCsA"] = CIRCUITSETUP_METER_CS_A;
+    doc["pins"]["meterCsB"] = CIRCUITSETUP_METER_CS_B;
+    doc["pins"]["irq0"] = CIRCUITSETUP_IRQ0;
+    doc["pins"]["irq1"] = CIRCUITSETUP_IRQ1;
+#if defined(CAN0_CS)
+    doc["pins"]["can0Cs"] = CAN0_CS;
+#endif
+#if defined(DISPLAY_CS_PIN)
+    doc["pins"]["displayCs"] = DISPLAY_CS_PIN;
+#endif
+#if defined(BOARD_VER_V3) && defined(RS485_RX_2)
+    if (static_cast<int>(CIRCUITSETUP_SPI_MISO) == static_cast<int>(RS485_RX_2)) {
+        doc["pins"]["misoRs485Conflict"] =
+            "Firmware maps CIRCUITSETUP_SPI_MISO and RS485_RX_2 to the same GPIO; if RS485-B is wired, "
+            "it can prevent the ATM90 from controlling MISO during meter CS.";
+    }
+#endif
+
+    if (!g_haveSavedMeterConfigs) {
+        doc["error"] = "No saved ATM90E32::Config (setup_circuitsetup_meter not run); refusing destructive probe.";
+        String out;
+        serializeJson(doc, out);
+        return out;
+    }
+
+    JsonArray chips = doc["chips"].to<JsonArray>();
+    const int csPins[kNumChips] = {CIRCUITSETUP_METER_CS_A, CIRCUITSETUP_METER_CS_B};
+
+    Serial.println(F("--- /api/circuitsetup-spi-probe (explicit ATM90 SPI) ---"));
+
+    bool anyUnlockOk = false;
+    bool everyChipAllReadsFFFF = true;
+
+    for (int chip = 0; chip < kNumChips; chip++) {
+        const int csGpio = csPins[chip];
+        JsonObject ch = chips.add<JsonObject>();
+        ch["chipIndex"] = chip;
+        ch["targetCsGpio"] = csGpio;
+        ch["initOkBeforeProbe"] = g_chipOk[chip];
+        ch["irq0Level"] = digitalRead(CIRCUITSETUP_IRQ0);
+        ch["irq1Level"] = digitalRead(CIRCUITSETUP_IRQ1);
+
+        JsonArray steps = ch["steps"].to<JsonArray>();
+
+        circuitsetup_spi_bus_all_cs_high();
+        spi_probe_step(steps, "01", "Park bus: all known CS outputs HIGH", "—", 0, 0,
+                       "CAN, display, meter CS-A/B inactive so MISO should tri-state except selected ATM90", true);
+
+        uint16_t r0 = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), LastSPIData, 0xFFFF);
+        spi_probe_step(steps, "02", "Baseline read LastSPIData (0x78) before reset", "R", LastSPIData, r0,
+                       "Any value; documents bus state before soft reset", true);
+
+        uint16_t rSr =
+            circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(WRITE), SoftReset, static_cast<uint16_t>(0x789A));
+        spi_probe_step(steps, "03", "SoftReset write 0x789A to reg 0x70", "W", SoftReset, rSr,
+                       "Library returns post-transfer byte-swapped value; chip resets after this", true);
+        delay(20);
+
+        uint16_t rPost = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), LastSPIData, 0xFFFF);
+        spi_probe_step(steps, "04", "Read LastSPIData after reset + 20ms", "R", LastSPIData, rPost, "Informational", true);
+
+        uint16_t rW =
+            circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(WRITE), CfgRegAccEn, static_cast<uint16_t>(0x55AA));
+        spi_probe_step(steps, "05", "Write CfgRegAccEn (0x7F) = 0x55AA (unlock configure regs)", "W", CfgRegAccEn, rW,
+                       "Write phase return per CommEnergyIC convention", true);
+
+        delayMicroseconds(200);
+        JsonArray unlockReads = ch["cfgUnlockLastSpiReads"].to<JsonArray>();
+        uint16_t rEcho = 0xFFFFu;
+        bool unlockOk = false;
+        for (int attempt = 0; attempt < 8; attempt++) {
+            if (attempt > 0) {
+                delayMicroseconds(300);
+            }
+            rEcho = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), LastSPIData, 0xFFFF);
+            JsonObject ar = unlockReads.add<JsonObject>();
+            ar["attempt"] = attempt;
+            ar["returnU16"] = rEcho;
+            char evh[8];
+            snprintf(evh, sizeof evh, "0x%04X", static_cast<unsigned>(rEcho));
+            ar["returnHex"] = evh;
+            ar["matches55AA"] = (rEcho == 0x55AAu);
+            if (rEcho == 0x55AAu) {
+                unlockOk = true;
+                break;
+            }
+        }
+        spi_probe_step(steps, "06", "Read LastSPIData after CfgRegAccEn (multi-try + delays)", "R", LastSPIData, rEcho,
+                       "0x55AA required; see cfgUnlockLastSpiReads[] (first try after 200us)", unlockOk);
+
+        uint16_t rEn = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), MeterEn, 0xFFFF);
+        spi_probe_step(steps, "07", "Read MeterEn (0x00)", "R", MeterEn, rEn, "Typically small non-zero after reset; 0xFFFF often means no MISO", true);
+
+        uint16_t rE0 = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), EMMState0, 0xFFFF);
+        spi_probe_step(steps, "08", "Read EMMState0 (0x71)", "R", EMMState0, rE0, "EMM status flags", true);
+
+        uint16_t rE1 = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), EMMState1, 0xFFFF);
+        spi_probe_step(steps, "09", "Read EMMState1 (0x72)", "R", EMMState1, rE1, "EMM status flags", true);
+
+        uint16_t rFreq = circuitsetup_atm90_raw_comm(csGpio, static_cast<unsigned char>(READ), Freq, 0xFFFF);
+        spi_probe_step(steps, "10", "Read Freq register (0xF8) raw", "R", Freq, rFreq,
+                       "If line present, often ~6000 for 60 Hz scaled; flat 0xFFFF / 0x0000 => check VT wiring", true);
+
+        ch["cfgUnlockEchoOk"] = unlockOk;
+        if (unlockOk) {
+            anyUnlockOk = true;
+        }
+        const bool allReadFFFF = (r0 == 0xFFFFu && rPost == 0xFFFFu && rEcho == 0xFFFFu && rEn == 0xFFFFu &&
+                                  rE0 == 0xFFFFu && rE1 == 0xFFFFu && rFreq == 0xFFFFu);
+        ch["allRegisterReads0xFFFF"] = allReadFFFF;
+        if (!allReadFFFF) {
+            everyChipAllReadsFFFF = false;
+        }
+        ch["summary"] = unlockOk ? "CfgRegAccEn echo OK — SPI path to this CS likely good."
+                                 : "CfgRegAccEn echo FAILED — expect 0x55AA; check CS GPIO, MISO contention, 3V3, wiring.";
+
+        g_chipOk[chip] = g_meters[chip].begin(g_lastMeterConfigs[chip]);
+        ch["reBeginAfterProbeOk"] = g_chipOk[chip];
+        {
+            JsonObject s99 = steps.add<JsonObject>();
+            s99["id"] = "99";
+            s99["phase"] = "Restore firmware driver state";
+            s99["detail"] = "ATM90E32::begin(last saved config for this chip)";
+            s99["reBeginOk"] = g_chipOk[chip];
+            s99["ok"] = g_chipOk[chip];
+        }
+
+        Serial.printf("SPI probe chip %d CS gpio %d unlockEcho=%s reBegin=%s\n", chip, csGpio,
+                      unlockOk ? "OK" : "FAIL", g_chipOk[chip] ? "OK" : "FAIL");
+    }
+
+    if (!anyUnlockOk && everyChipAllReadsFFFF) {
+        doc["interpretation"] =
+            "Every READ returned 0xFFFF on both chips: MISO stayed idle-high — the ATM90 never drove the bus. "
+            "Hardware checklist: (1) Continuity ESP MISO (GPIO in pins.spiMiso) to ATM90 MISO / stack header. "
+            "(2) Meter 3V3 and grounds. (3) CS-A/CS-B GPIOs match the 865B netlist (firmware uses meterCsA/meterCsB). "
+            "(4) If pins.misoRs485Conflict is set, do not use RS485-B on the same pin as SPI MISO. "
+            "(5) With only one meter IC populated, tie the unused CS high at the chip or leave unselected — wrong CS still gives 0xFFFF on the probed line.";
+    }
+
+    doc["doneMs"] = millis();
     String out;
     serializeJson(doc, out);
     return out;
