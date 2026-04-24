@@ -596,20 +596,10 @@ static void cmd_relay(const JsonDocument& doc) {
         return;
     }
 
-    if (!doc["address"].is<int>()) {
-        Serial.println("relay cmd: limit rules require integer 'address' 0-7");
-        return;
-    }
-    const int address = doc["address"].as<int>();
-    if (address < 0 || address > 7) {
-        Serial.printf("relay cmd: address %d out of range 0-7\n", address);
-        return;
-    }
-
     RelayRule rule;
     rule.kwh_limit = has_kwh ? doc["kwh_limit"].as<float>() : -1.0f;
     rule.kw_limit = has_kw ? doc["kw_limit"].as<float>() : -1.0f;
-    set_relay_rule((uint8_t)address, rule);
+    set_relay_rule(channel, rule);
 
     Serial.println("relay rules:");
     for (uint8_t ch = 0; ch < 8; ch++) {
