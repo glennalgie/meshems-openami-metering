@@ -93,11 +93,20 @@
     #define DISPLAY_CS_PIN 17   // Chip select
 
     // ==================== RS485 INTERFACE ================
-    // Match CircuitSetup Modbus A / B (MAX485): A = RX 6, TX 4; B = RX 42, TX 7
-    #define RS485_RX_1             GPIO_NUM_6   // RS485_RX_A
-    #define RS485_TX_1             GPIO_NUM_4   // RS485_TX_A (was 7)
-    #define RS485_RX_2             GPIO_NUM_42  // RS485_RX_B (was 15 — now meter CS1_BOARD1)
-    #define RS485_TX_2             GPIO_NUM_7   // RS485_TX_B (was 16 — now meter CS2_BOARD1)
+    // NESL EMS 865B (Liam / HW-519): two UARTs off the ESP32-S3. GPIOs match that pinout.
+    //   Silk "Modbus 2 - Client" (SD-card side):  RX GPIO6,  TX GPIO4  -> firmware RS485_*_1
+    //   Silk "Modbus 1 - Master" (e.g. temp):     RX GPIO42, TX GPIO7  -> firmware RS485_*_2
+    // Alternate labels used elsewhere: Modbus-A = 6/4, Modbus-B = 42/7 (same nets as above).
+    // Naming trap: RS485_*_1 is NOT "Modbus 1" on the PCB. modbus_master.cpp uses
+    // HardwareSerial _modbus1 on RS485_RX_1/TX_1 only — i.e. the "Modbus 2 - Client" header.
+    // Peripherals wired to "Modbus 1 - Master" (42/7) need code that drives RS485_*_2 (UART2
+    // or equivalent), not _modbus1 alone.
+    // GPIO42 is also CIRCUITSETUP_SPI_MISO — avoid active RS485 RX on 42 while using SPI meters
+    // unless the line is verified high-Z / isolated (see circuitsetup_api_json misoRs485Conflict).
+    #define RS485_RX_1             GPIO_NUM_6   // NESL "Modbus 2 - Client" RX
+    #define RS485_TX_1             GPIO_NUM_4   // NESL "Modbus 2 - Client" TX
+    #define RS485_RX_2             GPIO_NUM_42  // NESL "Modbus 1 - Master" RX (same pin as SPI MISO)
+    #define RS485_TX_2             GPIO_NUM_7   // NESL "Modbus 1 - Master" TX
 
     // ==================== RELAY ==========================
     #define RELAY_1_PIN 38  //Pin to toggle the onboard SSR, solid state relay - 5 vdc TTL TBD for larger ssr
