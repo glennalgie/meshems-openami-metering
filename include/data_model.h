@@ -1,18 +1,30 @@
 #pragma once
 
-//#define MODBUS_NUM_METERS 1
-#define MODBUS_NUM_METERS 3 //TODO 
+#include <stdint.h>
+
+// Number of meter slots in readings[].
+// ATM90E32 provides 6 independent CT channels per board pair; all other
+// Modbus meters use 3 slots (one per physical unit).
+// Increase ATM90E32_NUM_BOARDS in platformio.ini for multi-board setups.
+#if defined(METER_TYPE_ATM90E32)
+  #ifndef ATM90E32_NUM_BOARDS
+    #define ATM90E32_NUM_BOARDS 1
+  #endif
+  #define MODBUS_NUM_METERS (ATM90E32_NUM_BOARDS * 6)
+#else
+  #define MODBUS_NUM_METERS 3
+#endif
 #define MODBUS_NUM_THERMOSTATS 1
 
 #define MODBUS_NUM_COILS                2
 #define MODBUS_NUM_DISCRETE_INPUTS      2
-#define MODUBS_NUM_HOLDING_REGISTERS    2
+#define MODBUS_NUM_HOLDING_REGISTERS    2
 #define MODBUS_NUM_INPUT_REGISTERS      4
 #define CURRENT_HISTORY_SIZE            128  // Store 128 historical readings
 
 extern bool coils[MODBUS_NUM_COILS];
 extern bool discreteInputs[MODBUS_NUM_DISCRETE_INPUTS];
-extern uint16_t holdingRegisters[MODUBS_NUM_HOLDING_REGISTERS];
+extern uint16_t holdingRegisters[MODBUS_NUM_HOLDING_REGISTERS];
 extern uint16_t inputRegisters[MODBUS_NUM_INPUT_REGISTERS];
 
  // Struct for current, voltage, and power factor

@@ -5,3 +5,14 @@ compile_commands.json
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
+.cache
+.DS_Store
+build/
+*.bin
+*.elf
+*.hex
+*.map
+*.uf2
+*.uf2.bin
+.kilo
+*.log

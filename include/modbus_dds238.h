@@ -41,18 +41,10 @@ class Modbus_DDS238 : public ModbusMaster {
         float getActivePower();
         float getPowerFactor();
         float getFrequency();
-    private:
-        uint8_t modbus_address;
-        unsigned long timestamp_last_report;
-        unsigned long timestamp_last_failure;
-
-        float voltage;
-        float current;
-        float active_power;
-        float power_factor;
-        float frequency;
-        float total_enery;
-        float export_energy;
+     private:
+         uint8_t modbus_address;
+         unsigned long timestamp_last_report;
+         unsigned long timestamp_last_failure;
 };
 
 extern Modbus_DDS238 dds238_1;

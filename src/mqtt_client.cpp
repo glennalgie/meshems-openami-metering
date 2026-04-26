@@ -136,14 +136,14 @@ String topic_cmd;             // command topic (for 'southbound' commands)
 void mqtt_publish_json(const char* subtopic, const JsonDocument* payload);
 
 void generateTopics() {
-  //the top-level device topic string, eg: OPENAMI_<streetpoleEMSid>
+  // Generate device topic: MQTT_TOPIC/device_id/
+  topic_device.reserve(strlen(MQTT_TOPIC) + 1 + strlen(getDeviceID()) + 1 + 16);
   topic_device = MQTT_TOPIC;
   topic_device.concat("/");
   topic_device.concat(getDeviceID());
   topic_device.concat("/");
 
-  //the command topic we subscribe to, eg: OPENAMI_ECAE3D98/cmd
-  
+  // Generate command topic: MQTT_TOPIC/device_id/cmd
   topic_cmd = topic_device;
   topic_cmd.concat("cmd");
 }
@@ -378,50 +378,52 @@ void mqtt_publish_BWCmdIn_stats() { // incoming bandwidth used per streetpoleEMS
 
 // Method to publish json blob in a mqtt subtopic
 void mqtt_publish_json(const char* subtopic, const JsonDocument* payload) {
-    String topicBuf;
-    String jsonString;
-
+    // Use stack buffers where possible to reduce heap fragmentation from String objects
     size_t payload_len = measureJson(*payload);
     if (payload_len >= 1024) {
         Serial.println("MQTT publish: payload too large");
         return;
     }
 
-    serializeJson(*payload, jsonString);
+    // Serialize JSON directly to char buffer - avoids intermediate String allocation
     char data[1024];
-    jsonString.toCharArray(data, sizeof(data));
+    serializeJson(*payload, data, sizeof(data));
     
-    topicBuf = topic_device + subtopic;
+    // Build topic on stack buffer - avoid String concatenation for reduced heap usage
+    char topicBuf[256];
+    int topic_len = snprintf(topicBuf, sizeof(topicBuf), "%s%s",
+                             topic_device.c_str(), subtopic);
 
-    if (!mqttclient.publish(topicBuf.c_str(), data)) {
+    if (topic_len < 0 || topic_len >= (int)sizeof(topicBuf)) {
+        Serial.println("MQTT publish: topic buffer overflow");
+        return;
+    }
+
+    if (!mqttclient.publish(topicBuf, data)) {
         Serial.println("MQTT publish: failed");
     } else { // update stats on mqtt bandwidth used per streetpoleEMS
-        //mqtt_payload_bytes += payload_len;
-      
         mqtt_BWPubOut_payload_bytes += payload_len;
         mqtt_BWPubOut_tcpip_bytes += payload_len + 60; // TCP/IP+MQTT overhead
         mqtt_publish_count++;
     }
 
 #ifdef ENABLE_DEBUG_MQTT
-    Serial.printf("topic: %s, data: %s\n", topicBuf.c_str(), data);
+    Serial.printf("topic: %s, data: %s\n", topicBuf, data);
 #endif
-}  
+}
 
 
 //pull apart a comma-sep colon-delim name:value string and publish the name:value pairs under 'subtopic'
 void mqtt_publish_comma_sep_colon_delim(const char* subtopic, const char * data) {
-    String topicBuf;
+    char topicBuf[256];
     char buf[256];
     Serial.printf("MQTT publish: size:%d chars", strlen(data));
     do {
       int pos = strcspn(data, ":");
       strncpy(buf, data, pos);
       buf[pos] = 0;
-      String st(subtopic);
-      topicBuf = topic_device;
-      topicBuf.concat(st+"/");
-      topicBuf.concat(buf);
+      int topic_len = snprintf(topicBuf, sizeof(topicBuf), "%s%s/%s",
+                               topic_device.c_str(), subtopic, buf);
       //topic_ptr[pos] = 0;
       data += pos;
       if (*data++ == 0) {
@@ -433,11 +435,11 @@ void mqtt_publish_comma_sep_colon_delim(const char* subtopic, const char * data)
       mqtt_data[pos] = 0;
       data += pos;
 
-      if (!mqttclient.publish(topicBuf.c_str(), mqtt_data)) {
+      if (!mqttclient.publish(topicBuf, mqtt_data)) {
        Serial.println("MQTT publish: failed");
       }
 #ifdef ENABLE_DEBUG_MQTT
-      Serial.printf("topic: %s, data: %s\n", topicBuf.c_str(), mqtt_data);
+      Serial.printf("topic: %s, data: %s\n", topicBuf, mqtt_data);
 #endif
     } while (*data++ != 0);
 }

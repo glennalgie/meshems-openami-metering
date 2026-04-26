@@ -141,5 +141,23 @@
     #define CAN0_SI     16  // SPI MOSI
     #define CAN0_SCK    17  // SPI clock
     #define CAN0_INT    18  // MCP2515 interrupt output (active-low)
+
+    // ==================== ATM90E32 6-CHANNEL SPI METER ====================
+    // The ATM90E32 shares the same SPI bus as the OLED/SD (MOSI=11, CLK=12,
+    // MISO=13) but requires unique chip-select pins per IC.
+    //
+    // CS pins below are PLACEHOLDER values — verify and update to match the
+    // actual wiring on your board before enabling METER_TYPE_ATM90E32.
+    // GPIO 33 and 34 are used here as they are free on the 865B pinout.
+    //
+    // For add-on boards (ATM90E32_NUM_BOARDS >= 2), define additional CS pins:
+    //   ATM90E32_IC1_CS_1, ATM90E32_IC2_CS_1   (board 2)
+    //   ATM90E32_IC1_CS_2, ATM90E32_IC2_CS_2   (board 3)
+    // etc., and increase ATM90E32_NUM_BOARDS in platformio.ini accordingly.
+    #define ATM90E32_MOSI        GPIO_NUM_11  // Shared SPI bus (OLED/SD)
+    #define ATM90E32_MISO        GPIO_NUM_13  // Shared SPI bus (OLED/SD)
+    #define ATM90E32_CLK         GPIO_NUM_12  // Shared SPI bus (OLED/SD)
+    #define ATM90E32_IC1_CS      GPIO_NUM_33  // TODO: verify for target board
+    #define ATM90E32_IC2_CS      GPIO_NUM_34  // TODO: verify for target board
 #endif
 

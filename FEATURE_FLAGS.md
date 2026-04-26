@@ -31,10 +31,67 @@ build_flags =
 | `ENABLE_WIFI` | WiFi connectivity | None | Disabled |
 | `ENABLE_MQTT` | MQTT client (pub/sub) | `ENABLE_WIFI` | Disabled |
 | `ENABLE_CAN` | CAN bus (MCP2515 via SPI) | `SPI` | Disabled |
-| `ENABLE_MODBUS_MASTER` | Modbus master (RS485_1) | None | Disabled |
+| `ENABLE_MODBUS_MASTER` | Energy meter subsystem (RS485 Modbus or SPI) | None | Disabled |
 | `ENABLE_MODBUS_CLIENT` | Modbus client/slave (RS485_2) | None | Disabled |
 | `ENABLE_RELAYS` | Onboard SSR + I2C 8-channel SSR bank (PCF8574) | None | Disabled |
 | `ENABLE_DEBUG` | Debug logging to Serial | None | Disabled |
+
+## Meter Type Flags
+
+Set exactly **one** of these flags alongside `ENABLE_MODBUS_MASTER`.  If none is
+set, `METER_TYPE_DDS238` is used as the default to preserve backward compatibility.
+
+| Flag | Description | Interface | Channels |
+|------|-------------|-----------|---------|
+| `METER_TYPE_DDS238` | DDS238 single-phase energy meter (default) | RS-485 Modbus RTU | 3 meters |
+| `METER_TYPE_CHD130` | CHINT CHD130 single-phase energy meter | RS-485 Modbus RTU | 3 meters |
+| `METER_TYPE_DDSU666` | CHINT DDSU666 single-phase energy meter | RS-485 Modbus RTU | 3 meters |
+| `METER_TYPE_ATM90E32` | CircuitSetup 6-channel ATM90E32 meter | SPI | 6 CT channels/board |
+
+### ATM90E32 Additional Configuration
+
+When `METER_TYPE_ATM90E32` is active:
+
+1. **Library**: Uncomment the ATM90E32 library in `lib_deps` in `platformio.ini`:
+   ```ini
+   https://github.com/CircuitSetup/ATM90E32_Arduino_Library.git
+   ```
+
+2. **CS Pins**: Update `ATM90E32_IC1_CS` and `ATM90E32_IC2_CS` in `include/pins.h`
+   to match the actual GPIO wiring for your board.  The current values (GPIO 33/34)
+   are placeholders.
+
+3. **Board count**: Override the number of board pairs (default = 1 board = 6 channels):
+   ```ini
+   -DATM90E32_NUM_BOARDS=2   ; 12 channels across 2 board pairs
+   ```
+
+4. **Calibration**: Override defaults at build time if your hardware differs:
+   ```ini
+   -DATM90E32_LINE_FREQ=135          ; 50 Hz (default 4231 = 60 Hz)
+   -DATM90E32_VOLTAGE_GAIN=42080     ; 9V Jameco 112336 (meter <= v1.2)
+   -DATM90E32_CURRENT_GAIN=11131     ; 20A/25mA SCT-006 CT
+   -DATM90E32_PGA_GAIN=21            ; 2× gain for low-output CTs
+   ```
+
+5. **readings[] layout**: Each channel maps to one `readings[]` slot:
+   - `readings[0..2]` = IC1 channels A/B/C (CT1–CT3)
+   - `readings[3..5]` = IC2 channels A/B/C (CT4–CT6)
+   - Additional boards extend to `readings[6..11]`, etc.
+
+### Modbus Meter Address Configuration
+
+For Modbus meters (DDS238 / CHD130 / DDSU666), the three meter Modbus node
+addresses are set in `modbus_master.cpp`:
+
+```cpp
+#define METER_1_ADDR 0x50
+#define METER_2_ADDR 0x51
+#define METER_3_ADDR 0x52
+```
+
+Programme each meter to its assigned address before installation using the
+meter's front-panel configuration interface.
 
 ## Examples
 

@@ -214,20 +214,32 @@ void loop() {
     loop_modbus_client();
 #endif
 
+    // ==================== Modbus Client polling loop ====================
+#ifdef ENABLE_MODBUS_CLIENT
+    loop_modbus_client();
+#endif
+
     // ==================== MQTT polling loop ====================
 #ifdef ENABLE_MQTT
-    bool poll_due    = (millis() - lastMQTTPollMillis) > (unsigned long)MQTTPoll_rate;
-    bool publish_due = (millis() - lastMQTTMillis)     > (unsigned long)MQTTPublish_rootrate;
+    bool poll_due    = false;
+    bool publish_due = false;
+    unsigned long now = millis();
+    if (now - lastMQTTPollMillis > (unsigned long)MQTTPoll_rate) {
+        poll_due = true;
+    }
+    if (now - lastMQTTMillis > (unsigned long)MQTTPublish_rootrate) {
+        publish_due = true;
+    }
 
     if (poll_due || publish_due) {
         maintain_mqtt_connection();
 
         if (poll_due) {
-            lastMQTTPollMillis = millis();
+            lastMQTTPollMillis = now;
             poll_mqtt();
         }
         if (publish_due) {
-            lastMQTTMillis = millis();
+            lastMQTTMillis = now;
             // TODO: implement adaptive publish scheduling.
             // Goal: ~12 per-topic boolean flags control which topics fire each
             // loop_mqtt() call, driven by time-of-day schedule + configurable

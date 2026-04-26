@@ -2,12 +2,45 @@
 
 ## [Unreleased] - 2026-04-25
 
+### Added
+
+#### Multi-meter type support and ATM90E32 6-channel meter driver
+
+- `include/meter_atm90e32.h`, `src/meter_atm90e32.cpp` — New SPI driver for the CircuitSetup Expandable 6-Channel ATM90E32 energy meter.  Manages one or more board pairs (2× ATM90E32 ICs per board = 6 CT channels), populates `readings[]` with per-channel voltage, current, active power, apparent power, and power factor.  IC status is checked before each read; unresponsive boards are skipped gracefully.  Debug output is guarded by `ENABLE_DEBUG`.  Calibration constants (`ATM90E32_LINE_FREQ`, `ATM90E32_PGA_GAIN`, `ATM90E32_VOLTAGE_GAIN`, `ATM90E32_CURRENT_GAIN`) are overridable via `platformio.ini` build flags.
+
+- `include/modbus_ddsu666.h`, `src/modbus_ddsu666.cpp` — New Modbus RTU driver for the Chint DDSU666 single-phase energy meter.  Implements the full register map (voltage, current, active/reactive power, power factor, frequency, import/export energy) with correct scaling and signed 32-bit register handling for active/reactive power.  Follows the same class structure as `Modbus_DDS238` and `Modbus_CHD130`.
+
+- `platformio.ini` — Added `METER_TYPE_*` build flags section:
+  - `-DMETER_TYPE_DDS238` (active default) — DDS238 Modbus RTU
+  - `-DMETER_TYPE_CHD130` (commented) — CHD130 Modbus RTU
+  - `-DMETER_TYPE_DDSU666` (commented) — DDSU666 Modbus RTU
+  - `-DMETER_TYPE_ATM90E32` (commented) — 6-channel ATM90E32 SPI
+  - ATM90E32 library entry commented in `lib_deps` (uncomment to install)
+
+- `FEATURE_FLAGS.md` — Documented all four `METER_TYPE_*` flags, ATM90E32 library installation, CS pin configuration, board count override, calibration overrides, and `readings[]` channel layout.
+
+### Changed
+
+- `src/modbus_master.cpp` — Refactored into a meter-type-agnostic entry point.  RS-485 bus initialisation and SHT20 setup are skipped when `METER_TYPE_ATM90E32` is active.  Per-meter-type setup and poll functions are selected via `#if defined(METER_TYPE_*)` guards.  Default fallback to `METER_TYPE_DDS238` if no meter type flag is set.  `poll_energy_meters()` now re-enables meter polling (was commented out) and dispatches to the correct back-end.  `loop_modbus_master()` now calls `poll_energy_meters()` on every cycle in addition to `poll_thermostats()` (except for ATM90E32 which has no SHT20).
+
+- `include/data_model.h` — `MODBUS_NUM_METERS` is now conditionally defined: `ATM90E32_NUM_BOARDS * 6` when `METER_TYPE_ATM90E32` is set, or `3` otherwise, so `readings[]` is correctly sized for all meter types.
+
+- `include/modbus.h` — Added `#include <modbus_chd130.h>` and `#include <modbus_ddsu666.h>` so all Modbus meter headers are reachable through the aggregate include.  Removed stale `extern Modbus_DDS238* dds238_meters[]` declaration (array is now local to `modbus_master.cpp`).
+
+- `include/pins.h` — Added `ATM90E32_IC1_CS`, `ATM90E32_IC2_CS`, `ATM90E32_MOSI`, `ATM90E32_MISO`, `ATM90E32_CLK` pin definitions for `BOARD_VER_V3`; CS values are GPIO 33/34 placeholders with a TODO note to verify against the board schematic before use.
+
 ### Changed
 
 - `src/modbus_master.cpp` — expanded file-level doc comment to describe polling architecture and hardware; added function-level comments for all setup, poll, and loop functions; added rationale comment for `RS485_1_BAUD`; documented reserved EVSE timing variables; fixed `setup_dds238()` log message to print all three meter addresses instead of only the first; split combined timing variable declaration into three separately zero-initialised lines to eliminate partial-initialisation hazard
 - `src/mqtt_client.cpp`, `src/relay.cpp`, `src/wifi.cpp`, `src/display.cpp` — added missing trailing newline after closing `#endif` guard to silence compiler "no newline at end of file" warnings
-- `src/main.cpp` — added function-level doc comments for `setup()` and `loop()`; documented timer variable declarations; cleaned up stream-of-consciousness MQTT adaptive-publish TODO into structured bullet-point form; expanded the commented-out `setup_powerData_caches()` line with a TODO describing planned per-topic cache work
+- `src/main.cpp` — added function-level doc comments for `setup()` and `loop()`; documented timer variable declarations; cleaned up stream-of-consciousness MQTT adaptive-publish TODO into structured bullet-point form; expanded the commented-out `setup_powerData_caches()` line with a TODO describing planned per-topic cache work; optimized timer variables to cache `millis()` call, reducing drift and improving accuracy
+- `src/mqtt_client.cpp` — optimized MQTT topic/message generation to use stack buffers instead of String concatenation, reducing heap allocations and fragmentation; added reserved buffer sizes to `generateTopics()`
 - `AGENTS.md` — reformatted agent instructions to use simplified Do/Don't bullet style; added Commenting Style section with rules for C++ embedded code
+- `src/main.cpp` — reduced MQTT loop nesting by computing `poll_due`/`publish_due` flags before connection maintenance
+- `src/data_model.cpp` — improved `addCurrentReading()` to use incremental min/max tracking (O(1) common case instead of O(n) full scan), reducing CPU load for timeline graph updates
+- `include/data_model.h` — fixed typo `MODUBS_NUM_HOLDING_REGISTERS` → `MODBUS_NUM_HOLDING_REGISTERS`; added missing `#include <stdint.h>`
+- `include/modbus_dds238.h` — removed duplicate member variables (`voltage`, `current`, etc.) that shadowed `last_reading` struct, reducing memory usage and confusion
+- `src/modbus_dds238.cpp` — fixed bit-shift precedence bug in `read_modbus_extended_value()` (parentheses around shift before OR)
 
 ### Added
 
@@ -27,8 +60,6 @@
 - Added missing `ENABLE_RELAYS` wiring: `relay.h` include, `setup_relays()`, and `loop_relays()` calls
 - `src/mqtt_client.cpp` — guarded `#include <modbus_master.h>` with `ENABLE_MODBUS_MASTER`, `#include <i2c_ssr_bank.h>` and `cmd_relay` with `ENABLE_I2C_SSR_BANK`, and `readings[]`/`MODBUS_NUM_METERS` usage in `loop_mqtt` with `ENABLE_MODBUS_MASTER`
 - Fixed pre-existing typo `#define ENABLE_DEBUG_MQTT = 1` → `#define ENABLE_DEBUG_MQTT 1` in `src/mqtt_client.cpp`
-
-### Fixed
 
 #### FastLED integration (`platformio.ini`)
 - Added `fastled/FastLED @ 3.7.8` to `lib_deps` — the library was commented out, causing a missing `FastLED.h` compile error

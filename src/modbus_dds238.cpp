@@ -36,7 +36,7 @@ float Modbus_DDS238::read_modbus_extended_value(uint16_t registerAddress) {
         Serial.printf("MODBUS DDS238: Error reading register %d\n", registerAddress);
         throw std::runtime_error("Modbus read error");
     }
-    return (float)(getResponseBuffer(0) << 16 + getResponseBuffer(1));
+    return (float)((getResponseBuffer(0) << 16) | getResponseBuffer(1));
 }
 
 void Modbus_DDS238::poll() {
