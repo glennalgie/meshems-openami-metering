@@ -85,24 +85,29 @@ last_bandwidth_report_time  time in secs since last report
 
    */
 
+#ifdef ENABLE_MQTT
 #include "mqtt_client.h"
 #include <TimeLib.h>
 #include <WiFiMulti.h>
 #include <data_model.h>
 #include <config.h>
 #include <ArduinoJson.h>
-#include <modbus_master.h>
+#ifdef ENABLE_MODBUS_MASTER
+  #include <modbus_master.h>
+#endif
 #include <sunspec_model_213.h>            // TODO breaks up into base and harmonics separated subtopics for openami
 #include <sunspec_model_213_base.h>       // stays true to Sunspec base 213 data model schema
 #include <sunspec_model_213_harmonics.h>  // TODO confirm if there is a harmonics report for Sunspec model and adapt or change to be flexible
 #include <leakage_model_ivy41a.h>         // these are actioanable leakage sensor measurements based on Type B leakage
 #include <sunspec_model_1.h>
-#include <i2c_ssr_bank.h>
+#ifdef ENABLE_RELAYS
+  #include <i2c_ssr_bank.h>
+#endif
 #include <sunspec_model_11.h>    
 #include <ems_env_model.h>    
 //#include "modbus_devices.h"             // added by Kevin - future use
 #include "data_model.h"
-#define ENABLE_DEBUG_MQTT = 1
+#define ENABLE_DEBUG_MQTT 1  // Note: no '=' — was a pre-existing typo
 
 // some mqtt banditch stats to include hourly/daily as its own publish
 unsigned long mqtt_BWPubOut_payload_bytes = 0;
@@ -446,6 +451,7 @@ static void cmd_meter   (const JsonDocument&) { Serial.printf("matched \"meter\"
 static void cmd_bms     (const JsonDocument&) { Serial.printf("matched \"bms\"\n");      }
 static void cmd_inverter(const JsonDocument&) { Serial.printf("matched \"inverter\"\n"); }
 
+#ifdef ENABLE_RELAYS
 /**
  * Example relay payloads:
  * {"cmd":"relay","address":0,"kwh_limit":100.0}
@@ -496,6 +502,7 @@ static void cmd_relay(const JsonDocument& doc) {
         Serial.printf("  ch %d: kwh_limit=%.2f kw_limit=%.2f\n", ch, r.kwh_limit, r.kw_limit);
     }
 }
+#endif // ENABLE_RELAYS
 
 // Dispatch table — add new {keyword, handler} rows here to extend.
 typedef void (*cmd_handler_t)(const JsonDocument&);
@@ -505,7 +512,9 @@ static const CmdEntry cmd_table[] = {
   { "meter",    cmd_meter    },
   { "bms",      cmd_bms      },
   { "inverter", cmd_inverter },
+#ifdef ENABLE_RELAYS
   { "relay",    cmd_relay    },
+#endif
 };
 
 // Subscriber callback
@@ -592,6 +601,7 @@ void loop_mqtt() {
       // Serial.println("Published EMS nameplate");
        //TODO publish 1 or 3 phase OPENAMI per subpanel peer phase and per meter/tenant energy usage (TODO scope is consumed, generated, stored, transformed, distributed);
         //TODO  IF 3phase phase subpanel setup then - assume 3 phase subpanel 
+#ifdef ENABLE_MODBUS_MASTER
       mqtt_publish_EMS_3Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
       // TODO else publish single phase subpanel totalizer metrics
       //  mqtt_publish_EMS_1Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
@@ -615,6 +625,7 @@ void loop_mqtt() {
         mqtt_publish_Meter(topicId, readings[i]);
         */
         }
+#endif // ENABLE_MODBUS_MASTER
       } else {
         Serial.println("MQTT not connected!");
       }
@@ -663,3 +674,5 @@ void mqtt_publish_door_closed() {
   sprintf(buf,"%s/door", topic_device);
   mqttclient.publish(buf, "closed", 0);
 }
+
+#endif // ENABLE_MQTT

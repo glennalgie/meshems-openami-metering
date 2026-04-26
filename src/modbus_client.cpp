@@ -1,3 +1,4 @@
+#ifdef ENABLE_MODBUS_CLIENT
 /*
   ModbusRTUSlaveExample
 
@@ -36,3 +37,5 @@ void setup_modbus_client() {
 void loop_modbus_client() {
   modbus_client.poll();
 }
+
+#endif // ENABLE_MODBUS_CLIENT

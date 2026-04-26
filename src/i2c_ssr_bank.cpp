@@ -1,3 +1,4 @@
+#ifdef ENABLE_RELAYS
 #include <Arduino.h>
 #include <Wire.h>
 #include <i2c_ssr_bank.h>
@@ -99,3 +100,5 @@ void loop_i2c_ssr_bank_serial() {
         }
     }
 }
+
+#endif // ENABLE_RELAYS

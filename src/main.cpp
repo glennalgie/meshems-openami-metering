@@ -30,101 +30,196 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * 
+ * ============================================================
+ * Feature flags (set in platformio.ini build_flags):
+ * ============================================================
+ *   -DENABLE_OLED_DISPLAY    SH1106 OLED display over SPI
+ *   -DENABLE_WIFI            WiFi connectivity
+ *   -DENABLE_MQTT            MQTT client (auto-enables ENABLE_WIFI)
+ *   -DENABLE_CAN             CAN bus via MCP2515 (separate SPI instance)
+ *   -DENABLE_MODBUS_MASTER   Modbus master / RS485_1
+ *   -DENABLE_MODBUS_CLIENT   Modbus client/slave / RS485_2
+ *   -DENABLE_RELAYS          Relay control: onboard SSR + I2C 8-channel SSR bank (PCF8574)
+ *   -DENABLE_DEBUG           Extra debug Serial logging
+ * ============================================================
  */
 
 #include <Arduino.h>
-#include <modbus.h>     // Modbus communication protocols
-#include <buttons.h>    // Button input handling
-#include <display.h>    // SH1106 OLED display
-#include <console.h>    // Console UI for the display
-#include <SPI.h>        // SPI communication for display/CAN
-#include <can.h>        // Implementation of CAN bus communication
-#include <i2c_ssr_bank.h>
-#include <wifi.h>
-#include <mqtt_client.h>
+
+// ---- Core (always included) -------------------------------------------------
 #include <config.h>
 #include <data_model.h>
 #include <pins.h>
+#include <buttons.h>
 
+// ---- SPI (shared between display and CAN; include once) --------------------
+#if defined(ENABLE_OLED_DISPLAY) || defined(ENABLE_CAN)
+  #include <SPI.h>
+#endif
+
+// ---- OLED Display -----------------------------------------------------------
+#ifdef ENABLE_OLED_DISPLAY
+  #include <display.h>
+  #include <console.h>
+#endif
+
+// ---- CAN Bus ----------------------------------------------------------------
+#ifdef ENABLE_CAN
+  #include <can.h>
+#endif
+
+// ---- WiFi -------------------------------------------------------------------
+// MQTT requires WiFi; guard against someone enabling MQTT without WiFi.
+#ifdef ENABLE_MQTT
+  #ifndef ENABLE_WIFI
+    #error "ENABLE_MQTT requires ENABLE_WIFI. Add -DENABLE_WIFI to your build_flags."
+  #endif
+#endif
+
+#ifdef ENABLE_WIFI
+  #include <wifi.h>
+#endif
+
+// ---- MQTT -------------------------------------------------------------------
+#ifdef ENABLE_MQTT
+  #include <mqtt_client.h>
+#endif
+
+// ---- Modbus -----------------------------------------------------------------
+// Use the specific headers rather than the aggregate modbus.h so that enabling
+// only one side does not drag in declarations for the other.
+#ifdef ENABLE_MODBUS_MASTER
+  #include <modbus_master.h>
+#endif
+
+#ifdef ENABLE_MODBUS_CLIENT
+  #include <modbus_client.h>
+#endif
+
+// ---- Relays (onboard SSR + I2C 8-channel SSR bank) -------------------------
+#ifdef ENABLE_RELAYS
+  #include <relay.h>
+  #include <i2c_ssr_bank.h>
+#endif
+
+
+// ============================================================
+// setup()
+// ============================================================
+
+// One-time hardware and subsystem initialisation.
+// Runs in order: Serial → device ID → display splash → WiFi → MQTT →
+// Modbus master → Modbus client → CAN → buttons → relays.
+// Each subsystem is compiled in only when its feature flag is defined;
+// see the feature-flag table in the file header above.
 void setup() {
-    Serial.begin(115200);   // Initialize serial communication for debugging
+    Serial.begin(115200);
     Serial.println("INFO - Booting");
     
     generateDeviceID();
 
+#ifdef ENABLE_OLED_DISPLAY
     SPI.begin(DISPLAY_CLK_PIN, -1, DISPLAY_MOSI_PIN, DISPLAY_CS_PIN);
     setup_display();
 
     _console.addLine(" Display up! next is WiFi/Eth, ");
     _console.addLine(" NTP, MQTT, Modbus, Buttons... ");
-    // Display startup splash screen (Rick image)
     drawBitmap(40, 5, RICK_WIDTH, RICK_HEIGHT, rick);
     delay(1000);
-    
-    drawBitmap(0, 0, LOGO_WIDTH, LOGO_HEIGHT, eIOT_logo); // Render Logo
+    drawBitmap(0, 0, LOGO_WIDTH, LOGO_HEIGHT, eIOT_logo);
     delay(1000);
+#endif
 
+#ifdef ENABLE_WIFI
     setup_wifi();
+#endif
+
+#ifdef ENABLE_MQTT
     setup_mqtt_client();
-    //setup_powerData_caches(); //TODO maybe? openami to have 4-6 subtopics each with a cache planned , needs cache/buffered data for detecting a pattern change 
-    //      for optional use each the time its polled or before each time it gets published  - iterate also for  rules and automation
-    
-    // Initialize Modbus RTU master/client communication
-    setup_modbus_master(); // This sets up modbus master or "server" on RS485_1 with sensors like the SHT20 temp/humidity sensor or other devices
-    setup_modbus_client(); // This sets up a modbus slave or "client" interface on RS485_2
-    
-    //setup_gpio  // ssr, temp_humid, door contact/tamper. shock, imaging)
-    
-    //setup_can(); // Initialize CAN bus communication
+#endif
+
+    // TODO: setup_powerData_caches() — planned per-topic DTM power caches for
+    // the 4-6 OpenAMI subtopics (3-phase totals, per-phase, per-meter, leakage,
+    // harmonics, environmental).  Uncomment once the cache structs are defined.
+
+#ifdef ENABLE_MODBUS_MASTER
+    // Modbus master / "server" on RS485_1 — SHT20 temp/humidity and energy meters
+    setup_modbus_master();
+#endif
+
+#ifdef ENABLE_MODBUS_CLIENT
+    // Modbus slave / "client" on RS485_2
+    setup_modbus_client();
+#endif
+
+#ifdef ENABLE_CAN
+    setup_can();
+#endif
 
     setup_buttons();
-    setup_i2c_ssr_bank();
 
+#ifdef ENABLE_RELAYS
+    setup_relays();
+    setup_i2c_ssr_bank();
+#endif
+
+#ifdef ENABLE_DEBUG
+    Serial.println("INFO - Debug logging enabled");
+#endif
+
+#ifdef ENABLE_OLED_DISPLAY
     _console.addLine(" EMS In-service Ready!");
     _console.addLine("  CHECK MQTT @");
-    _console.addLine("  public.cloud.shiftr.io"); //TODO grab the setup strings from the config file
-    _console.addLine("  filter OPENAMI/#");       //TODO grab the setup strings from the config file
+    _console.addLine("  public.cloud.shiftr.io"); //TODO pull from config
+    _console.addLine("  filter OPENAMI/#");
     _console.addLine("  Push a button?");
-
+#endif
 }
 
 
-/**
- * @brief Main program loop that runs continuously
- * 
- * Handles periodic tasks and polling:
- * - Check button inputs
- * - Update display
- * - Process CAN bus messages
- * - Handle Modbus master polling
- * - Handle Modbus client requests
- * - Handle MQTT Publish
- * - Handle MQTT cmd responses 
- * 
- */
+// ============================================================
+// loop()
+// ============================================================
 
-unsigned long lastModbusMillis = 0;
-unsigned long lastMQTTMillis = 0;
-unsigned long lastMQTTPollMillis = 0;
+// Timer variables are declared only when the guarded subsystem is active,
+// avoiding unused-variable warnings in minimal builds.
+#ifdef ENABLE_MODBUS_MASTER
+static unsigned long lastModbusMillis = 0;
+#endif
 
+#ifdef ENABLE_MQTT
+static unsigned long lastMQTTMillis     = 0;  // last MQTT publish timestamp
+static unsigned long lastMQTTPollMillis = 0;  // last mqttclient.loop() call timestamp
+#endif
 
+// Main firmware loop.  Each subsystem is serviced in priority order:
+//   1. Buttons     — always polled for responsive UI
+//   2. Modbus      — master and client on their own rate timers
+//   3. MQTT        — connection maintenance, then poll and publish on separate rates
+//   4. Peripherals — display, CAN, relays at their own internal rates
 void loop() {
-   loop_buttons();
-   
-   // ==================== Modbus Master polling loop ====================
-   if (millis() - lastModbusMillis > ModbusMaster_pollrate) {
+    loop_buttons();
+
+    // ==================== Modbus Master polling loop ====================
+#ifdef ENABLE_MODBUS_MASTER
+    if (millis() - lastModbusMillis > (unsigned long)ModbusMaster_pollrate) {
         lastModbusMillis = millis();
         loop_modbus_master();
-   }
+    }
+#endif
 
-   // ==================== Modbus Client polling loop ====================
-   //loop_modbus_client(); // Modbus RS485_2 client
+    // ==================== Modbus Client polling loop ====================
+#ifdef ENABLE_MODBUS_CLIENT
+    loop_modbus_client();
+#endif
 
-   // ==================== MQTT polling loop ====================
-   bool poll_due    = (millis() - lastMQTTPollMillis) > (unsigned long)MQTTPoll_rate;
-   bool publish_due = (millis() - lastMQTTMillis)     > (unsigned long)MQTTPublish_rootrate;
+    // ==================== MQTT polling loop ====================
+#ifdef ENABLE_MQTT
+    bool poll_due    = (millis() - lastMQTTPollMillis) > (unsigned long)MQTTPoll_rate;
+    bool publish_due = (millis() - lastMQTTMillis)     > (unsigned long)MQTTPublish_rootrate;
 
-   if (poll_due || publish_due) {
+    if (poll_due || publish_due) {
         maintain_mqtt_connection();
 
         if (poll_due) {
@@ -133,27 +228,36 @@ void loop() {
         }
         if (publish_due) {
             lastMQTTMillis = millis();
-            /*
-                TODO  calculate which are the normal periodic work items for this loop based on configurable MQTT periodic and adaptive
-                PUBLISH operations
-                perhaps  12 or so adaptive Publish global bools turned on or off per loop, the periodic  tasks in the subloops can then be targeted to run
-                this allows for adaptive rate of openami topics to be published , these adaptive rates can have a defualt periodicity
-                but then time of day schedule can chnage the periodicity of the tasks.
-                for example publish a base rate of 30 seconds, publish leaks at period of hourly , publish 3 ph summaries and single tenant meters
-                 every 15 min itervals, publish harmnics every 15 mins, publish environmentals every 15 mins ,
-                 dont publish stuff on same 15 min  cadence (other than the 3Phase and meters must be on hourly edge cadence)  to minmize peak bandwidths
-            */
+            // TODO: implement adaptive publish scheduling.
+            // Goal: ~12 per-topic boolean flags control which topics fire each
+            // loop_mqtt() call, driven by time-of-day schedule + configurable
+            // default periodicities.  Proposed cadences:
+            //   - Base readings     : 30 s
+            //   - 3-phase summaries : 15 min (staggered from per-meter publishes)
+            //   - Per-meter data    : 15 min
+            //   - Harmonics         : 15 min
+            //   - Environmental     : 15 min
+            //   - Leakage           : 60 min
+            // 3-phase and meter topics should align to hourly boundaries;
+            // stagger other topics to minimise peak upstream bandwidth.
             loop_mqtt();
         }
-   }
-   
-   // ==================== Kick off the subloops ======================
-    
-    loop_buttons(); // Button inputs
-    loop_display(); // Display updates
-    //loop_can(); //  CAN bus messages
+    }
+#endif
 
-    //loop_i2c_ssr_bank_serial();
-    //loop_i2c_ssr_bank_blink_test();
-    
+    // ==================== Peripheral sub-loops ==========================
+
+#ifdef ENABLE_OLED_DISPLAY
+    loop_display();
+#endif
+
+#ifdef ENABLE_CAN
+    loop_can();
+#endif
+
+#ifdef ENABLE_RELAYS
+    loop_relays();
+    loop_i2c_ssr_bank_serial();
+#endif
+
 }

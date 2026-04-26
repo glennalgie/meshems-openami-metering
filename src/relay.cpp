@@ -1,3 +1,4 @@
+#ifdef ENABLE_RELAYS
 #include <Arduino.h>
 #include <relay.h>
 #include <pins.h>
@@ -22,3 +23,5 @@ void setup_relays() {
 void loop_relays() {
     // Onboard SSR is event-driven via toggle_relay_1(); nothing to poll here.
 }
+
+#endif // ENABLE_RELAYS

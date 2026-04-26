@@ -1,3 +1,4 @@
+#ifdef ENABLE_OLED_DISPLAY
 /**The MIT License (MIT)
 
 Copyright (c) 2016 by Rene-Martin Tudyka
@@ -403,3 +404,5 @@ void loop_display() {
   //}
   show_seconds_counter();
 }
+
+#endif // ENABLE_OLED_DISPLAY

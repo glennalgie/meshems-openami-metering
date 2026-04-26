@@ -1,3 +1,4 @@
+#ifdef ENABLE_WIFI
 #include <Arduino.h>
 #include <WiFiMulti.h>
 #include <wifi.h>
@@ -44,3 +45,5 @@ bool setup_wifi() {
   Serial.printf("wifi: %s: %s\n", WIFI_SSID, wifi_client_connected() ?  WiFi.localIP().toString().c_str() : "FAILED");
   return wifi_client_connected();
 }
+
+#endif // ENABLE_WIFI
