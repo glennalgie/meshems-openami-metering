@@ -17,9 +17,9 @@
  */
 
 #include <SPI.h>
-#include "meter_atm90e32.h"
-#include "data_model.h"
-#include "pins.h"
+#include "metering/meter_atm90e32.h"
+#include "core/data_model.h"
+#include "core/pins.h"
 
 // --------------------------------------------------------------------------
 // ATM90E32 IC instances — two per board (IC1 = CT1-3, IC2 = CT4-6)

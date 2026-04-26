@@ -1,4 +1,4 @@
-#include <config.h>
+#include <core/config.h>
 #include <Arduino.h>
 
 char device_id[MAX_DEVICE_ID_CHARS] = {0};

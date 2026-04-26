@@ -1,7 +1,7 @@
 #pragma once
 
-#include <modbus_master.h>
-#include "data_model.h"
+#include <metering/modbus_master.h>
+#include "core/data_model.h"
 
 /**
  * @file modbus_ddsu666.h

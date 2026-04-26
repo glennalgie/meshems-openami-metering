@@ -1,7 +1,7 @@
 #ifdef ENABLE_RELAYS
 #include <Arduino.h>
-#include <relay.h>
-#include <pins.h>
+#include <hw/relay.h>
+#include <core/pins.h>
 
 bool btn_toggle = false;
 

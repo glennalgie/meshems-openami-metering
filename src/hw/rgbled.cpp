@@ -1,6 +1,6 @@
-#include <rgbled.h>
-#include <debug.h>
-#include <pins.h>
+#include <hw/rgbled.h>
+#include <core/debug.h>
+#include <core/pins.h>
 
 #define NUM_LEDS    1
 #define BRIGHTNESS  25

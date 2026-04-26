@@ -1,5 +1,5 @@
-#include <console.h>
-#include <display.h>
+#include <core/console.h>
+#include <hw/display.h>
 
 Console _console;
 

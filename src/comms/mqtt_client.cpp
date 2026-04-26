@@ -86,27 +86,27 @@ last_bandwidth_report_time  time in secs since last report
    */
 
 #ifdef ENABLE_MQTT
-#include "mqtt_client.h"
+#include "comms/mqtt_client.h"
 #include <TimeLib.h>
 #include <WiFiMulti.h>
-#include <data_model.h>
-#include <config.h>
+#include <core/data_model.h>
+#include <core/config.h>
 #include <ArduinoJson.h>
 #ifdef ENABLE_MODBUS_MASTER
-  #include <modbus_master.h>
+  #include <metering/modbus_master.h>
 #endif
-#include <sunspec_model_213.h>            // TODO breaks up into base and harmonics separated subtopics for openami
-#include <sunspec_model_213_base.h>       // stays true to Sunspec base 213 data model schema
-#include <sunspec_model_213_harmonics.h>  // TODO confirm if there is a harmonics report for Sunspec model and adapt or change to be flexible
-#include <leakage_model_ivy41a.h>         // these are actioanable leakage sensor measurements based on Type B leakage
-#include <sunspec_model_1.h>
+#include <metering/sunspec_model_213.h>            // TODO breaks up into base and harmonics separated subtopics for openami
+#include <metering/sunspec_model_213_base.h>       // stays true to Sunspec base 213 data model schema
+#include <metering/sunspec_model_213_harmonics.h>  // TODO confirm if there is a harmonics report for Sunspec model and adapt or change to be flexible
+#include <metering/leakage_model_ivy41a.h>         // these are actioanable leakage sensor measurements based on Type B leakage
+#include <metering/sunspec_model_1.h>
 #ifdef ENABLE_RELAYS
-  #include <i2c_ssr_bank.h>
+  #include <hw/i2c_ssr_bank.h>
 #endif
-#include <sunspec_model_11.h>    
-#include <ems_env_model.h>    
+#include <metering/sunspec_model_11.h>
+#include <metering/ems_env_model.h>
 //#include "modbus_devices.h"             // added by Kevin - future use
-#include "data_model.h"
+#include "core/data_model.h"
 // Debug MQTT serial output is controlled by the project-wide ENABLE_DEBUG flag.
 // Do not add a separate ENABLE_DEBUG_MQTT define here.
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ModbusMaster.h>
-#include "data_model.h"
+#include "core/data_model.h"
 
 /*
 Watch out for MAX485 DO VS D1 unloaded SERIAL SIDE AFFECTS - SEE TECH DETAILS AT  https://www.analog.com/en/products/max485.html#part-details

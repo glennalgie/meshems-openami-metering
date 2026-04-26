@@ -12,10 +12,10 @@
   
   Modified for EMS ModCan Hub by: doug mendonca
 */
-#include <modbus.h>
+#include <metering/modbus.h>
 #include <SoftwareSerial.h>
-#include <pins.h>
-#include <data_model.h>
+#include <core/pins.h>
+#include <core/data_model.h>
 
 SoftwareSerial _modbus2(RS485_2_RX, RS485_2_TX); //(rx, tx) corresponds with HW519 rxd txd pins
 ModbusRTUSlave modbus_client(_modbus2);

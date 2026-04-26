@@ -1,6 +1,6 @@
 #include <Arduino.h>
-#include <buttons.h>
-#include <pins.h>
+#include <hw/buttons.h>
+#include <core/pins.h>
 
 /* use multimeter to obtain thresholds for different resistor values
 Voltage divider button array using 1K resistors: */

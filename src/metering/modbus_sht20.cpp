@@ -1,4 +1,4 @@
-#include <modbus_sht20.h>
+#include <metering/modbus_sht20.h>
 #include <TimeLib.h>
 
 #define PAUSE_ON_RAMP_LEVELS 30000

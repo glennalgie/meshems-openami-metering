@@ -1,7 +1,7 @@
-#include <modbus_chd130.h>
+#include <metering/modbus_chd130.h>
 #include <TimeLib.h>
-#include <data_model.h>
-#include <DTMPowerCache.h>
+#include <core/data_model.h>
+#include <metering/DTMPowerCache.h>
 
 Modbus_CHD130::Modbus_CHD130() {}
 /*

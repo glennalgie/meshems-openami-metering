@@ -1,7 +1,7 @@
 #ifdef ENABLE_WIFI
 #include <Arduino.h>
 #include <WiFiMulti.h>
-#include <wifi.h>
+#include <comms/wifi.h>
 
 //Kenya hackathon
 //#define WIFI_PW "E@rthday2025"

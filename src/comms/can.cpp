@@ -17,7 +17,7 @@
  
  #include <mcp_can.h>
  #include <SPI.h>
- #include <pins.h>
+ #include <core/pins.h>
 
 // Operating mode selection
 enum CAN_OPERATION_MODE {

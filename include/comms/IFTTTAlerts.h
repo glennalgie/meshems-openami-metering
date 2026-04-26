@@ -6,8 +6,8 @@
 #include <vector>
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include "DTMPowerCache.h"
-#include "Config.h"
+#include "metering/DTMPowerCache.h"
+#include "core/config.h"
 /*
 WARNING This is an in-progress initial draft implementation to support lite-weight  framework of local data-model driven IFTTT alerts and automations to decouple decision based policy enforcements 
 
@@ -54,7 +54,7 @@ private:
 };
 
 // IFTTTAlerts.cpp
-#include "IFTTTAlerts.h"
+#include "comms/IFTTTAlerts.h"
 
 IFTTTAlerts::IFTTTAlerts(PubSubClient& client) : _mqtt(client), _lastPublishTime(0), _publishInterval(60000) {}
 

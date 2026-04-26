@@ -43,8 +43,8 @@
 
 #include <Arduino.h>
 #include <ATM90E32.h>
-#include "data_model.h"
-#include "pins.h"
+#include "core/data_model.h"
+#include "core/pins.h"
 
 // --------------------------------------------------------------------------
 // Board count — one "board" = two ATM90E32 ICs = 6 CT channels.

@@ -1,8 +1,8 @@
 #ifdef ENABLE_RELAYS
 #include <Arduino.h>
 #include <Wire.h>
-#include <i2c_ssr_bank.h>
-#include <pins.h>
+#include <hw/i2c_ssr_bank.h>
+#include <core/pins.h>
 
 // Many relay/SSR boards are active-low on the expander outputs (LOW = SSR on).
 #ifndef I2C_SSR_ACTIVE_LOW

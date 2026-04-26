@@ -1,7 +1,7 @@
 #pragma once
 
-#include <modbus_master.h>
-#include "data_model.h"
+#include <metering/modbus_master.h>
+#include "core/data_model.h"
 
 class Modbus_DDS238 : public ModbusMaster {
     public:

@@ -25,10 +25,10 @@ SOFTWARE.
 
 See more at http://blog.squix.ch
 */
-#include <display.h>
-#include <console.h>
-#include <pins.h>
-#include <data_model.h>  // Added for currentHistory access
+#include <hw/display.h>
+#include <core/console.h>
+#include <core/pins.h>
+#include <core/data_model.h>  // Added for currentHistory access
 
 // Uncomment one of the following based on OLED type
 // SH1106(bool HW_SPI, int rst, int dc, int cs );

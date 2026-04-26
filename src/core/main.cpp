@@ -48,10 +48,10 @@
 #include <Arduino.h>
 
 // ---- Core (always included) -------------------------------------------------
-#include <config.h>
-#include <data_model.h>
-#include <pins.h>
-#include <buttons.h>
+#include <core/config.h>
+#include <core/data_model.h>
+#include <core/pins.h>
+#include <hw/buttons.h>
 
 // ---- SPI (shared between display and CAN; include once) --------------------
 #if defined(ENABLE_OLED_DISPLAY) || defined(ENABLE_CAN)
@@ -60,13 +60,13 @@
 
 // ---- OLED Display -----------------------------------------------------------
 #ifdef ENABLE_OLED_DISPLAY
-  #include <display.h>
-  #include <console.h>
+  #include <hw/display.h>
+  #include <core/console.h>
 #endif
 
 // ---- CAN Bus ----------------------------------------------------------------
 #ifdef ENABLE_CAN
-  #include <can.h>
+  #include <comms/can.h>
 #endif
 
 // ---- WiFi -------------------------------------------------------------------
@@ -78,29 +78,29 @@
 #endif
 
 #ifdef ENABLE_WIFI
-  #include <wifi.h>
+  #include <comms/wifi.h>
 #endif
 
 // ---- MQTT -------------------------------------------------------------------
 #ifdef ENABLE_MQTT
-  #include <mqtt_client.h>
+  #include <comms/mqtt_client.h>
 #endif
 
 // ---- Modbus -----------------------------------------------------------------
 // Use the specific headers rather than the aggregate modbus.h so that enabling
 // only one side does not drag in declarations for the other.
 #ifdef ENABLE_MODBUS_MASTER
-  #include <modbus_master.h>
+  #include <metering/modbus_master.h>
 #endif
 
 #ifdef ENABLE_MODBUS_CLIENT
-  #include <modbus_client.h>
+  #include <metering/modbus_client.h>
 #endif
 
 // ---- Relays (onboard SSR + I2C 8-channel SSR bank) -------------------------
 #ifdef ENABLE_RELAYS
-  #include <relay.h>
-  #include <i2c_ssr_bank.h>
+  #include <hw/relay.h>
+  #include <hw/i2c_ssr_bank.h>
 #endif
 
 

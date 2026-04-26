@@ -47,7 +47,7 @@
 #define MQTT_TIMEOUT 3
 #endif
 
-#include "data_model.h"
+#include "core/data_model.h"
 
 // -------------------------------------------------------------------
 // Perform the background MQTT operations. Must be called in the main

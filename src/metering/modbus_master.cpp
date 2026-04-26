@@ -23,10 +23,10 @@
  * Hardware: HW519 RS-485 transceiver on RS485_1_RX / RS485_1_TX (pins.h).
  */
 
-#include <modbus.h>
-#include <pins.h>
-#include <data_model.h>
-#include <config.h>
+#include <metering/modbus.h>
+#include <core/pins.h>
+#include <core/data_model.h>
+#include <core/config.h>
 #include <math.h>
 
 // --------------------------------------------------------------------------
@@ -46,16 +46,16 @@
 // SoftwareSerial and SHT20 are always needed: the RS-485 bus hosts the SHT20
 // temperature/humidity sensor regardless of the energy meter type.
 #include <SoftwareSerial.h>
-#include <modbus_sht20.h>
+#include <metering/modbus_sht20.h>
 
 #if defined(METER_TYPE_ATM90E32)
-    #include <meter_atm90e32.h>
+    #include <metering/meter_atm90e32.h>
 #elif defined(METER_TYPE_DDS238)
-    #include <modbus_dds238.h>
+    #include <metering/modbus_dds238.h>
 #elif defined(METER_TYPE_CHD130)
-    #include <modbus_chd130.h>
+    #include <metering/modbus_chd130.h>
 #elif defined(METER_TYPE_DDSU666)
-    #include <modbus_ddsu666.h>
+    #include <metering/modbus_ddsu666.h>
 #endif
 
 // --------------------------------------------------------------------------

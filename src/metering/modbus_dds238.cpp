@@ -1,7 +1,7 @@
-#include <modbus_dds238.h>
+#include <metering/modbus_dds238.h>
 #include <TimeLib.h>
-#include <data_model.h>
-#include <DTMPowerCache.h>
+#include <core/data_model.h>
+#include <metering/DTMPowerCache.h>
 #define PAUSE_ON_RAMP_LEVELS 30000
 
 /*
