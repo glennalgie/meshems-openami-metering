@@ -4,16 +4,7 @@
 #include <comms/wifi.h>
 
 
-#define WIFI_SSID "Eris"
-#define WIFI_PW "AlphaTangoLima!"
-
-//NESL Lab
-// #define WIFI_PW "E@rthday2025"
-// #define WIFI_SSID "EMSLab"
-
-//Port Labs
-// #define WIFI_SSID "Port Labs Members"
-// #define WIFI_PW "lesstalkmorewifi"
+#include <secrets.h>
 
 int CONNECT_ATTEMPTS = 6;
 WiFiMulti wifiMulti;

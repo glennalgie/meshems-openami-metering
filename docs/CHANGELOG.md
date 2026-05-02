@@ -1,6 +1,58 @@
 # Changelog
 
-## [Unreleased] - 2026-04-25
+## [Unreleased] - 2026-05-01
+
+### Added
+
+#### W5500 SPI Ethernet driver (`include/comms/ethernet.h`, `src/comms/ethernet.cpp`)
+- New `ENABLE_ETHERNET` feature flag for W5500 SPI Ethernet via HR961160C (BOARD_VER_V3 only; mutually exclusive with `ENABLE_WIFI`)
+- `setup_ethernet()` hardware-resets the W5500, initialises the shared SPI bus with MISO, and acquires an IP via DHCP; `loop_ethernet()` calls `Ethernet.maintain()` to renew leases
+- `ethernet_connected()` and `get_eth_ip()` status helpers available to other modules
+- `platformio.ini` — added `arduino-libraries/Ethernet @ ^2.0.0` to `lib_deps`
+
+#### SD card driver (`include/hw/sd_card.h`, `src/hw/sd_card.cpp`)
+- New `ENABLE_SD_CARD` feature flag for SPI-shared SD card reader (BOARD_VER_V3 only); `SD_CS` wired to GPIO 10
+- `setup_sd_card()` mounts the FAT filesystem on the shared SPI bus; `sd_card_available()` exposes mount status to other modules
+- Optional `ENABLE_SD_CARD_DEBUG` sub-flag prints card type, size, and a full directory listing on boot via `sd_list_dir()`
+- Header enforces `BOARD_VER_V3` at compile time so the flag cannot accidentally be set on incompatible board revisions
+
+#### SHT20 CSV logger (`include/hw/sd_logger.h`, `src/hw/sd_logger.cpp`)
+- New `ENABLE_SD_SHT20_LOG` feature flag; logs SHT20 temperature and humidity to `/environmental_log.csv` at a configurable interval (default 60 s via `SD_SHT20_LOG_INTERVAL_MS`)
+- `setup_sht20_csv_log()` creates the file with a CSV header on first boot; rows are only appended after the first successful SHT20 poll to prevent spurious `0 °C / 0 %` entries
+- Compile-time `#error` guards in the header enforce `ENABLE_SD_CARD` and `ENABLE_MODBUS_MASTER` as prerequisites
+
+### Changed
+
+#### Per-meter current history (`include/core/data_model.h`, `src/core/data_model.cpp`, `src/hw/display.cpp`, `src/metering/modbus_master.cpp`)
+- `currentHistory` changed from a single `CurrentHistory` instance to `CurrentHistory[MODBUS_NUM_METERS]` — one circular buffer per meter; struct members now carry default initialisers so the array is zero-initialised without a separate definition
+- `addCurrentReading(float)` signature extended to `addCurrentReading(int meterIdx, float)` with bounds check; `src/core/data_model.cpp` updated accordingly
+- `src/hw/display.cpp` — all `currentHistory.` accesses updated to `currentHistory[0].` to read the first meter's buffer for the on-screen graph
+- `src/metering/modbus_master.cpp` — `addCurrentReading()` calls and Serial Plotter CSV output moved behind new `USB_PLOTTER` build flag and extended to loop over all `MODBUS_NUM_METERS` instead of only index 0
+
+#### Ethernet / WiFi mutual exclusion (`src/core/main.cpp`, `src/comms/mqtt_client.cpp`)
+- `src/core/main.cpp` — added `#error` guard rejecting simultaneous `ENABLE_WIFI` + `ENABLE_ETHERNET`; relaxed `ENABLE_MQTT` prerequisite to accept either network interface; wired `setup_ethernet()` / `loop_ethernet()` and SD card / logger setup into the feature-flag boot sequence; SPI `#include` guard extended to cover `ENABLE_SD_CARD` and `ENABLE_ETHERNET`
+- `src/comms/mqtt_client.cpp` — `transportClient` is now `EthernetClient` when `ENABLE_ETHERNET` is set, `WiFiClient` otherwise; `WiFiMulti.h` and `Ethernet.h` includes gated behind their respective flags
+
+#### Pin assignments (`include/core/pins.h`)
+- Added `SD_CS` (GPIO 10) with `GPIO_NUM_*`-typed macros for all SD card pins
+- Added Ethernet interface pins: `ETH_CS` (GPIO 9), `ETH_CLK/MOSI/MISO` (shared SPI bus), `ETH_RST` (GPIO 3); verified against hardware 2026-05-01
+- `CAN0_CS` corrected from GPIO 10 → GPIO 41 to resolve conflict with the newly defined `SD_CS`
+
+#### Build configuration (`platformio.ini`)
+- Switched active network flag from `ENABLE_WIFI` to `ENABLE_ETHERNET`; disabled `ENABLE_OLED_DISPLAY`; switched active meter type from `METER_TYPE_ATM90E32` back to default (DDS238, no flag required)
+- Added documented flag entries for `ENABLE_SD_CARD`, `ENABLE_SD_SHT20_LOG`, `SD_SHT20_LOG_INTERVAL_MS`, `USB_PLOTTER`, and `ENABLE_SD_CARD_DEBUG`
+- Removed `-DCONFIG_ETH_ENABLED` (superseded by `ENABLE_ETHERNET`)
+
+
+#### WiFi credentials externalised (`include/secrets.h`, `include/secrets_example.h`)
+
+- `include/secrets.h` — new gitignored header holding `WIFI_SSID` and `WIFI_PW`; matched by the existing `secrets.*` `.gitignore` pattern so it is never committed
+- `include/secrets_example.h` — committed template with placeholder values so new contributors know what file to create
+- `src/comms/wifi.cpp` — replaced hardcoded `#define WIFI_SSID` / `#define WIFI_PW` blocks (including stale commented-out NESL Lab and Port Labs entries) with `#include <secrets.h>`
+
+- `.gitignore` — added `*.clangd` pattern
+
+---
 
 ### Changed
 
