@@ -1,4 +1,4 @@
-# EIOT.Energy EMS DER/Site Controller Dev Kit - OpenAMI Metering Application
+# NESL EMS DER/Site Controller Dev Kit - OpenAMI Metering Application
 
 ## StreetPoleEMS web dashboard (lab demo)
 
@@ -39,6 +39,7 @@ A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management sy
 - Moved runtime status into `subpanel_ENV`, including uptime, CircuitSetup chip status, CT current samples, WiFi state/IP, and placeholder BLE/Ethernet up/down fields.
 - Removed detailed harmonic arrays from `subpanel_3Ph`; detailed harmonics remain in the dedicated `subpanel_harmonics` topic.
 - Expanded tenant meter publishing from 3 to 6 meters, so MQTT now emits `meter_0` through `meter_5`.
+- Kept per-meter phase indicators constrained to the three LV feeder phases: meters 0/3 = phase 1, 1/4 = phase 2, 2/5 = phase 3.
 - Updated the DDS238 Modbus table for six meters using lab addresses `0x50` through `0x55`.
 - Updated SunSpec model 1 options text for the 6-port CircuitSetup meter configuration.
 - Fixed the local `wifi.h` naming conflict by renaming the project WiFi wrapper to `app_wifi.h` and adjusted PlatformIO library detection for Arduino `WiFi`/`Networking`.

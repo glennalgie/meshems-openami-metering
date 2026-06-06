@@ -169,6 +169,7 @@ void update() {
         readings[i].active_power = dds238_meters[i]->getActivePower(); // Active Power
         readings[i].power_factor = dds238_meters[i]->getPowerFactor(); // Power Factor
         readings[i].frequency = dds238_meters[i]->getFrequency(); // Frequency
+        readings[i].phase = (i % 3) + 1; // 3-phase LV feeder: meter 0/3=A, 1/4=B, 2/5=C.
         readings[i].total_energy = dds238_meters[i]->getTotalEnergy(); // Total Energy
         readings[i].export_energy = dds238_meters[i]->getExportEnergy(); // Export Energy
         readings[i].import_energy = dds238_meters[i]->getImportEnergy(); // Import Energy

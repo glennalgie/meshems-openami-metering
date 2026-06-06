@@ -258,7 +258,7 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   // For now assume phase A. This can be extended to put the meter readings in the
   // correct phase using configuration data about which meter is on which phase.
   //TODO grab the specific cached meterId  PowerData[i] for example
-  sunSpecData.Phase= meterId; // assume 1 tenenat per phase in a 3 tenant 3ph subpanel , TODO part of stage operation and subpanel schema backed up  to a subpanel staging cloud 
+  sunSpecData.Phase = (meterId % 3) + 1; // 3-phase LV feeder: meter 0/3=A, 1/4=B, 2/5=C.
   sunSpecData.PhV= meterData.voltage;
   sunSpecData.PhA = meterData.current;
   sunSpecData.PhW = meterData.active_power * 1000;

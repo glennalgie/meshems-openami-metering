@@ -112,6 +112,7 @@ void circuitsetup_sync_powerdata_readings() {
         readings[i].reactive_power = 0.0f;
         readings[i].power_factor = (volts > 1.0f && amps > 0.01f) ? 0.99f : 1.0f;
         readings[i].frequency = g_freq[i / 3];
+        readings[i].phase = (i % 3) + 1;
         readings[i].timestamp_last_report = now();
     }
 }
