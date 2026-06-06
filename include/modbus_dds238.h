@@ -58,3 +58,6 @@ class Modbus_DDS238 : public ModbusMaster {
 extern Modbus_DDS238 dds238_1;
 extern Modbus_DDS238 dds238_2;
 extern Modbus_DDS238 dds238_3;
+extern Modbus_DDS238 dds238_4;
+extern Modbus_DDS238 dds238_5;
+extern Modbus_DDS238 dds238_6;

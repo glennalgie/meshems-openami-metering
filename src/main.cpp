@@ -49,7 +49,7 @@
 #include <console.h>    // Console UI for the display
 #include <can.h>        // Implementation of CAN bus communication
 #include <i2c_ssr_bank.h>
-#include <wifi.h>
+#include <app_wifi.h>
 #include <mqtt_client.h>
 #include <data_model.h>
 #include <circuitsetup_meter.h>
@@ -804,7 +804,7 @@ void loop() {
     loop_modbus_client();
 #endif
     loop_buttons(); 
-    //loop_display();
+    loop_display();
     //loop_can();
     //loop_i2c_ssr_bank_serial();
     //loop_i2c_ssr_bank_blink_test();

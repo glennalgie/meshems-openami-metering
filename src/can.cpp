@@ -55,7 +55,7 @@ char msgString[128];                     // Buffer for debug messages
 // ==================== SPI & CAN Controller Setup ====================
 
 // Use global SPI — same SCK/MISO/MOSI as OLED and CircuitSetup meter (see main.cpp SPI.begin).
-MCP_CAN CAN0(&SPI, CAN0_CS);
+static MCP_CAN* CAN0 = nullptr;
 
 // ==================== Function Declarations ====================
 
@@ -67,6 +67,12 @@ void printCANMessage(long unsigned int canId, byte length, byte *data, bool isTx
  
 void setup_can()
 {   
+  pinMode(CAN0_CS, OUTPUT);
+  digitalWrite(CAN0_CS, HIGH);
+
+  static MCP_CAN canController(&SPI, CAN0_CS);
+  CAN0 = &canController;
+
   // Configure pin for interrupt signal from MCP2515
   pinMode(CAN0_INT, INPUT);
 
@@ -75,7 +81,7 @@ void setup_can()
   }
 
   // Initialize MCP2515 with selected baud rate and crystal frequency
-  if (CAN0.begin(MCP_ANY, MCP_BUS_BAUD, MCP_CRYSTAL_FREQ) == CAN_OK) {
+  if (CAN0->begin(MCP_ANY, MCP_BUS_BAUD, MCP_CRYSTAL_FREQ) == CAN_OK) {
     if (CAN_DEBUG_LEVEL > 0) {
       Serial.println("INFO - MCP2515 Initialized Successfully!");
     }
@@ -85,7 +91,7 @@ void setup_can()
   }
 
   // Set normal mode to allow messages to be transmitted and received
-  CAN0.setMode(MCP_NORMAL);
+  CAN0->setMode(MCP_NORMAL);
 
   if (CAN_DEBUG_LEVEL > 0) {
     Serial.println("INFO - CAN interface is active");
@@ -102,12 +108,16 @@ void setup_can()
  
 void loop_can()
 {
+  if (CAN0 == nullptr) {
+    return;
+  }
+
   // ---- RECEIVE SECTION ----
   if (CAN_OPERATING_MODE == CAN_MODE_READ_ONLY || CAN_OPERATING_MODE == CAN_MODE_READ_WRITE) {
     // Check if data is available
-    if (CAN_MSGAVAIL == CAN0.checkReceive()) {
+    if (CAN_MSGAVAIL == CAN0->checkReceive()) {
       // Read the message data
-      CAN0.readMsgBuf(&rxCanID, &rxLen, rxBuf);
+      CAN0->readMsgBuf(&rxCanID, &rxLen, rxBuf);
       
       // Process the received message
       processReceivedMessage(rxCanID, rxLen, rxBuf);
@@ -143,6 +153,10 @@ void loop_can()
  * @return true if successful, false otherwise
  */
 bool sendCANMessage(long unsigned int canId, byte length, byte *data) {
+  if (CAN0 == nullptr) {
+    return false;
+  }
+
   if (length > 8) {
     if (CAN_DEBUG_LEVEL > 0) {
       Serial.println("ERROR: CAN data length exceeds 8 bytes");
@@ -151,7 +165,7 @@ bool sendCANMessage(long unsigned int canId, byte length, byte *data) {
   }
   
   // Send the message
-  byte sndStat = CAN0.sendMsgBuf(canId, 0, length, data);
+  byte sndStat = CAN0->sendMsgBuf(canId, 0, length, data);
   
   if (sndStat == CAN_OK) {
     if (CAN_DEBUG_LEVEL > 0) {

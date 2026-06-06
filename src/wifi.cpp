@@ -1,18 +1,19 @@
 #include <Arduino.h>
 #include <WiFiMulti.h>
-#include <wifi.h>
+#include <app_wifi.h>
 
 //Kenya hackathon
 //#define WIFI_PW "E@rthday2025"
 //#define WIFI_SSID "EMSLab"
 
 //NESL Lab
-// #define WIFI_PW "E@rthday2025"
-// #define WIFI_SSID "EMSLab"
+#define WIFI_SSID "EMSLab"
+#define WIFI_PW "E@rthday2025"
 
-//NESL Lab
-#define WIFI_SSID "Port Labs Members"
-#define WIFI_PW "lesstalkmorewifi"
+
+//Port Labs
+//#define WIFI_SSID "Port Labs Members"
+//#define WIFI_PW "lesstalkmorewifi"
 
 //secret lab
 //#define WIFI_SSID "Starlink"

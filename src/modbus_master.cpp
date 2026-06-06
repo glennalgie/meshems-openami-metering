@@ -24,6 +24,9 @@
 #define DDS238_1_ADDR 0x50
 #define DDS238_2_ADDR 0x51
 #define DDS238_3_ADDR 0x52
+#define DDS238_4_ADDR 0x53
+#define DDS238_5_ADDR 0x54
+#define DDS238_6_ADDR 0x55
 
 
 // 3 meter subpanel , either 1 tenant meter per phase or all 3 meters on same phase 
@@ -55,19 +58,19 @@ Modbus_DDS238 dds238_1;
 Modbus_DDS238 dds238_2;
 Modbus_DDS238 dds238_3;
 //UNcomment for the 6-meter subpanels
-//Modbus_DDS238 dds238_4;
-//Modbus_DDS238 dds238_5;
-//Modbus_DDS238 dds238_6;
+Modbus_DDS238 dds238_4;
+Modbus_DDS238 dds238_5;
+Modbus_DDS238 dds238_6;
 //UNcomment for the 9-meter subpanels
 //Modbus_DDS238 dds238_7;
 //Modbus_DDS238 dds238_8;
 //Modbus_DDS238 dds238_9;
 
 //Modbus_DDS238* dds238_meters[MODBUS_NUM_METERS] = {&dds238_1}; // Array of single 3 phase or single 1 phase tenant Modbus meters
-Modbus_DDS238* dds238_meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3}; // Array of single 3 phase or single 1 phase tenant Modbus meters
+Modbus_DDS238* dds238_meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3, &dds238_4, &dds238_5, &dds238_6}; // Array of single 3 phase or single 1 phase tenant Modbus meters
 
 // Uncomment for the 3/6/9 single phase meter 
-ModbusMaster* meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3}; // add to the array for the 3 multi-meter boxes
+ModbusMaster* meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3, &dds238_4, &dds238_5, &dds238_6}; // add to the array for the 6 multi-meter boxes
 //ModbusMaster* meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3, &dds238_4, &dds238_5, &dds238_6}; // add to the array for the 3 multi-meter boxes
 //ModbusMaster* meters[MODBUS_NUM_METERS] = {&dds238_1, &dds238_2, &dds238_3, &dds238_4, &dds238_5, &dds238_6, &dds238_7, &dds238_8, &dds238_9}; // add to the array for the 3 multi-meter boxes
 // Timing variables
@@ -91,15 +94,15 @@ void setup_dds238() {
    dds238_1.set_modbus_address(DDS238_1_ADDR);
    dds238_2.set_modbus_address(DDS238_2_ADDR);
    dds238_3.set_modbus_address(DDS238_3_ADDR);
-   //dds238_4.set_modbus_address(DDS238_4_ADDR);
-   //dds238_5.set_modbus_address(DDS238_5_ADDR);
-   //dds238_6.set_modbus_address(DDS238_6_ADDR);
+   dds238_4.set_modbus_address(DDS238_4_ADDR);
+   dds238_5.set_modbus_address(DDS238_5_ADDR);
+   dds238_6.set_modbus_address(DDS238_6_ADDR);
    dds238_1.begin(DDS238_1_ADDR, _modbus1);
    dds238_2.begin(DDS238_2_ADDR, _modbus1);
    dds238_3.begin(DDS238_3_ADDR, _modbus1);
-    //dds238_4.begin(DDS238_4_ADDR, _modbus1);
-    //dds238_5.begin(DDS238_5_ADDR, _modbus1);
-    //dds238_6.begin(DDS238_6_ADDR, _modbus1);
+    dds238_4.begin(DDS238_4_ADDR, _modbus1);
+    dds238_5.begin(DDS238_5_ADDR, _modbus1);
+    dds238_6.begin(DDS238_6_ADDR, _modbus1);
     //dds238_7.begin(DDS238_7_ADDR, _modbus1);
     //dds238_8.begin(DDS238_8_ADDR, _modbus1);
     //dds238_9.begin(DDS238_9_ADDR, _modbus1);

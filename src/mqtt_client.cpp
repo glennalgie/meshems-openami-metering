@@ -33,16 +33,16 @@
    Boston, MA 02111-1307, USA.
 
 Behind the meter Use cases:
-    MDU BUILDINg MULTI TENANT BUSS main a LeadEMSs at the MAINs publishes MAINs and balanced energy subsystems to Wan cloud and to Building Lan as mqtt energy status source of truth. 
+    MDU BUILDING BUILD-EMS MULTI TENANT BUSS mains a LeadEMSs at the MAINs publishes MAINs and balanced energy subsystems to Wan cloud and to Building Lan as mqtt energy status source of truth. 
     other building subsystem EMS subpanels such as HVAC and MultiEV and/or GismoPower stalls or building kitchen appliance subpanels keep each of  their subsystems in profile of Group Lead EMS distributing energy asset transfer policy
     schedules to the various building enrgy subsystems.     
-The subsystems EMSs publish to the LeadEMS and optionally to each other on a well known mqtt discovery and negotiation channel
+A network of EMSs publish to the LeadEMS and optionally to each other on a well known mqtt discovery and negotiation channel
     UPnP like  discovery of Building edges check-in with the designated MAINs LeadEMS to receive each of their policy schedule bulk and periodically iterated updates
     The Lead EMS is a dual ESP32S3 running mostly in hotstandby reporting and remote configurable on an 2 way mqtt OPENAMI to the Utiity cloud edge and i=on a transient as needed can dro sync and allow the standby ESP32 to host a web browser that
     shows energy utlitizations stats and can accepte authenticated local command UX , THe behind the meter architecture is designed as a no single point of failure.  a n:1 EMS sparing strategy is possible in the 
 Front of the Meter Use Case
-   IEEE ISV StreetPoleEMS multi tenant bidirectional energy asset transfer Policy Enforcer Edge at the Smartened Village StreetPole. S\Each StreetPoleENS communicates with distributed GroupLead EMS policy serving Java Linux Nodes.
-   Thes lead Java Linux nodes receive periodic usage telemetry from l\discoverred StreetPoleEMS edges and from front of meter and behind the meter DERs
+   IEEE ISV Street-EMS multi tenant bidirectional energy asset transfer Policy Enforcer Edge at the Smartened Village StreetPole. S\Each StreetPoleENS communicates with distributed GroupLead EMS policy serving Java Linux Nodes.
+   An optional  lead policy serving Java Linux node per LV-feeder receive periodic usage telemetry from discoverred StreetPoleEMS edges and from front of meter and behind the meter DERs
    that periodically advertise their capabilities and name plate and present utilized capacities - key dimensions of DERs capabilities are  geneerate, transform, store and consume. 
    THe multiple streetpoleems edges  on a shared LVfeeder also has a single (and backup) declared "LVfeeder Lead EMS" that keeps a totalizer data maodel source of truth of the LVfeeder 
    energy transport nameplate capacity and present capacity sharing this over mqtt on a well known  published/discovered mqtt too the GroupLead policcy serving EMS ( Java Linix multicore node. 
@@ -90,7 +90,9 @@ last_bandwidth_report_time  time in secs since last report
 #include <WiFiMulti.h>
 #include <data_model.h>
 #include <config.h>
+#include <app_wifi.h>
 #include <ArduinoJson.h>
+#include <circuitsetup_meter.h>
 #include <modbus_master.h>
 #include <sunspec_model_213.h>            // TODO breaks up into base and harmonics separated subtopics for openami
 #include <sunspec_model_213_base.h>       // stays true to Sunspec base 213 data model schema
@@ -294,6 +296,19 @@ void mqtt_publish_EMS_ENV(String EMSId, long timestamp) {
   EMS_ENV_Model EMS_ENV_cache;
   EMS_ENV_cache.toJson(jsonDoc);
   jsonDoc["timestamp"] = timestamp;
+  jsonDoc["status_ms"] = millis();
+  jsonDoc["cs_ok_0"] = circuitsetup_chip_init_ok(0);
+  jsonDoc["cs_ok_1"] = circuitsetup_chip_init_ok(1);
+  jsonDoc["ct0_amps"] = circuitsetup_latest_amps(0);
+  jsonDoc["ct1_amps"] = circuitsetup_latest_amps(1);
+  jsonDoc["r0_current"] = readings[0].current;
+  jsonDoc["wifi"] = wifi_client_connected() ? "up" : "down";
+  jsonDoc["wifi_up"] = wifi_client_connected();
+  jsonDoc["wifi_ip"] = wifi_client_connected() ? get_wifi_ip() : "";
+  jsonDoc["ble"] = "down";
+  jsonDoc["ble_up"] = false;
+  jsonDoc["eth"] = "down";
+  jsonDoc["eth_up"] = false;
   mqtt_publish_json(topicBuf.c_str(), &jsonDoc);
 }
 
@@ -681,6 +696,23 @@ void setup_mqtt_client() {
 
 void loop_mqtt() {
   uint32_t loop_timestamp = esp_log_timestamp();
+  const unsigned long nowMs = millis();
+  static bool firstPublish = true;
+  static unsigned long lastSubpanelMs = 0;
+  static unsigned long lastMeterGroupMs = 0;
+  static unsigned long lastEnvMs = 0;
+  static unsigned long lastMfrMs = 0;
+  static unsigned long lastCircuitSetupMs = 0;
+  static unsigned long lastLeakageMs = 0;
+  static unsigned long lastHarmonicsMs = 0;
+
+  auto publish_due = [&](unsigned long& lastMs, int intervalMs) {
+    if (firstPublish || intervalMs <= 0 || nowMs - lastMs >= (unsigned long)intervalMs) {
+      lastMs = nowMs;
+      return true;
+    }
+    return false;
+  };
 
       //mqtt_publish(input);
       if (mqttclient.connected()) {  
@@ -690,36 +722,49 @@ void loop_mqtt() {
 
         
        // First is to  publish Sunspec model 1 subpanel manufacture details TODO is 1 per day or per hour
-      mqtt_publish_EMS_MFR("", loop_timestamp);  //publish Sunspec model 1 manufacture details
-      Serial.println("Published EMS Model 1 MFR Info");
+      if (publish_due(lastMfrMs, MQTTPublish_mfr_rate)) {
+        mqtt_publish_EMS_MFR("", loop_timestamp);  //publish Sunspec model 1 manufacture details
+        Serial.println("Published EMS Model 1 MFR Info");
+      }
 
       // publish real time subpanel cabinet environmetals such as temp/pressure/humid/  tamper and 
       // TODO integrate shock and  loud noise and possily street pole image snapsot on demand from mqtt command
-      mqtt_publish_EMS_ENV("", loop_timestamp);
-      Serial.println("Published subpanel environmental data");
+      if (publish_due(lastEnvMs, MQTTPublish_env_rate)) {
+        mqtt_publish_EMS_ENV("", loop_timestamp);
+        Serial.println("Published subpanel environmental data");
+      }
 
-      mqtt_publish_CircuitSetup(loop_timestamp);
-      Serial.println("Published CircuitSetup meter mapping");
+      if (publish_due(lastCircuitSetupMs, MQTTPublish_circuitsetup_rate)) {
+        mqtt_publish_CircuitSetup(loop_timestamp);
+        Serial.println("Published CircuitSetup meter mapping");
+      }
       
     // TODO Next publish Sunspec model xyz subpanel DER nameplate capacity  rating 
       // mqtt_publish_EMS_Rated("", readings[0]);  //publish Sunspec model xyza rating details
       // Serial.println("Published EMS nameplate");
        //TODO publish 1 or 3 phase OPENAMI per subpanel peer phase and per meter/tenant energy usage (TODO scope is consumed, generated, stored, transformed, distributed);
         //TODO  IF 3phase phase subpanel setup then - assume 3 phase subpanel 
-      mqtt_publish_EMS_3Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
-      // TODO else publish single phase subpanel totalizer metrics
-      //  mqtt_publish_EMS_1Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
-       Serial.println("Published EMS per Phase Totalizers");
+      if (publish_due(lastSubpanelMs, MQTTPublish_subpanel_rate)) {
+        mqtt_publish_EMS_3Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
+        // TODO else publish single phase subpanel totalizer metrics
+        //  mqtt_publish_EMS_1Ph("", readings[0]);  // publish Sunspec model 213 schema for the 3 phase subpanel
+        Serial.println("Published EMS per Phase Totalizers");
+      }
        //next is publish EMS per phase Leakage , TODO adpative rate: if leakage is non zero or leakage fault or leakage changed
-      mqtt_publish_Leakage("", readings[0]);
-      Serial.println("Published per phase leakage");
+      if (publish_due(lastLeakageMs, MQTTPublish_leakage_rate)) {
+        mqtt_publish_Leakage("", readings[0]);
+        Serial.println("Published per phase leakage");
+      }
 
       //next is publish EMS per phase Harmonics , TODO adpative rate: if leakage is non zero or leakage fault or leakage changed
-      mqtt_publish_Harmonics("", loop_timestamp);
-      Serial.println("Published per phase Harmonics");
+      if (publish_due(lastHarmonicsMs, MQTTPublish_harmonics_rate)) {
+        mqtt_publish_Harmonics("", loop_timestamp);
+        Serial.println("Published per phase Harmonics");
+      }
 
     // next is loop over the subpanel per tenant meters   
-    for(int i=0;i<MODBUS_NUM_METERS;i++) {
+    if (publish_due(lastMeterGroupMs, MQTTPublish_meter_group_rate)) {
+      for(int i=0;i<MODBUS_NUM_METERS;i++) {
           mqtt_publish_Meter(i, readings[i]);  
           // TODO add modbus node number and per meter leakage RCD Fault in the readings powerdata
           Serial.println("Published tenant meter num:");
@@ -729,16 +774,18 @@ void loop_mqtt() {
         mqtt_publish_Meter(topicId, readings[i]);
         */
         }
+      }
+      mqtt_interval_ts = nowMs;
+      if (nowMs - last_bandwidth_report_time >= BANDWIDTH_REPORT_INTERVAL_MS) {
+       mqtt_publish_BWPubOut_stats();
+       mqtt_publish_BWCmdIn_stats();
+       Serial.println("Published stats/bandwidth");
+       last_bandwidth_report_time = nowMs;
+      }
+      firstPublish = false;
       } else {
         Serial.println("MQTT not connected!");
       }
-      mqtt_interval_ts = millis();
-    if (millis() - last_bandwidth_report_time >= BANDWIDTH_REPORT_INTERVAL_MS) {
-     mqtt_publish_BWPubOut_stats();
-     mqtt_publish_BWCmdIn_stats();
-     Serial.println("Published stats/bandwidth");
-     last_bandwidth_report_time = millis();
-    }
 }
 
 void poll_mqtt() {

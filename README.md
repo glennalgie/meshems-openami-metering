@@ -32,6 +32,22 @@ A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management sy
 
 ---
 
+### 2026-06-06 Firmware/MQTT Update
+
+- Renamed the MQTT device ID prefix from `StreetPoleEMS_` to `StreetEMS_`.
+- Split MQTT publishing into per-subtopic rates: `subpanel_3Ph`, `meter_0..meter_n`, `subpanel_ENV`, `subpanel_MFR`, `subpanel_circuitsetup`, `subpanel_RCMleaks`, and `subpanel_harmonics`.
+- Moved runtime status into `subpanel_ENV`, including uptime, CircuitSetup chip status, CT current samples, WiFi state/IP, and placeholder BLE/Ethernet up/down fields.
+- Removed detailed harmonic arrays from `subpanel_3Ph`; detailed harmonics remain in the dedicated `subpanel_harmonics` topic.
+- Expanded tenant meter publishing from 3 to 6 meters, so MQTT now emits `meter_0` through `meter_5`.
+- Updated the DDS238 Modbus table for six meters using lab addresses `0x50` through `0x55`.
+- Updated SunSpec model 1 options text for the 6-port CircuitSetup meter configuration.
+- Fixed the local `wifi.h` naming conflict by renaming the project WiFi wrapper to `app_wifi.h` and adjusted PlatformIO library detection for Arduino `WiFi`/`Networking`.
+- Deferred MCP2515 CAN object construction until after its CS pin is configured, preventing the boot-time GPIO warning on `IO 10`.
+
+Build check: `pio run -e esp32-s3-devkitc-1` passes. Remaining known warning: `src/main.cpp` still reports an out-of-bounds `relayShadow[1][h]` write while `kBoards = 1`.
+
+---
+
 ### MQTT Relay Command Interface
 
 All commands publish JSON to `openami/<device_id>/cmd`. The subscriber parses the `cmd` field and dispatches to the appropriate handler.

@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 #define MAX_DEVICE_ID_CHARS   32
-#define DEVICE_ID_PREFIX      "StreetPoleEMS_"
+#define DEVICE_ID_PREFIX      "StreetEMS_"
 
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"
@@ -38,7 +38,14 @@
 
 //TODO allow these to 
 extern int ModbusMaster_pollrate;    //in 1000's millisecond or seconds
-extern int MQTTPublish_rootrate;  //in 1000's millisecond or seconds
+extern int MQTTPublish_rootrate;  // MQTT publish scheduler tick in milliseconds
+extern int MQTTPublish_subpanel_rate;      // subpanel_3Ph publish interval
+extern int MQTTPublish_meter_group_rate;   // meter_0..meter_n group publish interval
+extern int MQTTPublish_env_rate;           // subpanel_ENV publish interval
+extern int MQTTPublish_mfr_rate;           // subpanel_MFR publish interval
+extern int MQTTPublish_circuitsetup_rate;  // subpanel_circuitsetup publish interval
+extern int MQTTPublish_leakage_rate;       // subpanel_RCMleaks publish interval
+extern int MQTTPublish_harmonics_rate;     // subpanel_harmonics publish interval
 extern int MQTTPoll_rate;         //in milliseconds, how often to call mqttclient.loop()
 
 
