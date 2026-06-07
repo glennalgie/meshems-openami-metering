@@ -225,6 +225,7 @@ void update() {
         readings[i].active_power  = meters[i]->getActivePower();
         readings[i].power_factor  = meters[i]->getPowerFactor();
         readings[i].frequency     = meters[i]->getFrequency();
+        readings[i].phase         = (int8_t)(i % 3);
         readings[i].total_energy  = meters[i]->getTotalEnergy();
         readings[i].export_energy = meters[i]->getExportEnergy();
         readings[i].import_energy = meters[i]->getImportEnergy();

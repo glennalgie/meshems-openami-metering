@@ -235,6 +235,10 @@ static unsigned long lastMQTTPollMillis = 0;  // last mqttclient.loop() call tim
 void loop() {
     loop_buttons();
 
+#ifdef ENABLE_WIFI
+    loop_wifi();
+#endif
+
     // ==================== Modbus Master polling loop ====================
 #ifdef ENABLE_MODBUS_MASTER
     if (millis() - lastModbusMillis > (unsigned long)ModbusMaster_pollrate) {

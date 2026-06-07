@@ -103,4 +103,7 @@ void setup_atm90e32();
 // Call from poll_energy_meters() inside loop_modbus_master().
 void poll_atm90e32();
 
+bool atm90e32_board_ok(int boardIndex);
+float atm90e32_latest_amps(int channelIndex);
+
 #endif // METER_TYPE_ATM90E32

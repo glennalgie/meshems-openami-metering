@@ -33,7 +33,7 @@ struct EMS_ENV_Model {
     float latitude_deg = 0.0;      // GPS latitude (decimal degrees)
     float longitude_deg = 0.0;     // GPS longitude in decimal degrees
     float altitude_m = 0.0;        // Altitude in meters above sea level
-    char location_text[50] = "North_Pole";
+    char location_text[50] = "North_Pole";  // default EMS for Santa Claus toy factory energy controller HO HO HO
     // Internal cache timestamps
     unsigned long last_modbus_update_ms = 0;
     unsigned long last_gpio_update_ms = 0;
@@ -47,18 +47,21 @@ struct EMS_ENV_Model {
 
     // Clear cached values
     void clear() {
-        temperature_C = 0.0;
-        humidity_percent = 0.0;
-        door_open = false;
+        timestamp_ms = 0;      
+        temperature_C = 0.0;   // NOTE a Loose contactor not at torque at 30 amp can get to 70C or more , fire an alert if cabinet , dynamically reduce current of supply points
+        humidity_percent = 0.0;   // Constant high humidity can expose metal contacts to corrosion speeding contact resistance and temps over time
+        door_open = false;// fire a tamper alarm and possibly isolate for lifesafety
+        door_open_start_ms = 0;    
+        door_open_duration_ms = 0;
         timestamp_ms = 0;
-        latitude_deg = 0.0;
+        latitude_deg = 0.0;  //geo  location expected to be set at installation via a Installer smartphone activation app. 
+                            // alternative is if a mobile appliance minigrid/trailer then advise that a EMS expansion slot stack module built that has radio module with GPS 
         longitude_deg = 0.0;
         altitude_m = 0.0;
         strncpy(location_text, "Unknown Location", sizeof(location_text));
         last_modbus_update_ms = 0;
         last_gpio_update_ms = 0;
-        door_open_start_ms = 0;
-        door_open_duration_ms = 0;
+       
     }
     // friendly location info
     void setLocationText(const char* loc) {

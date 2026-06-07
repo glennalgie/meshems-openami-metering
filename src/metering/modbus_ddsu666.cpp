@@ -1,6 +1,7 @@
 #include <metering/modbus_ddsu666.h>
 #include <TimeLib.h>
 #include <core/data_model.h>
+#include <stdexcept>
 
 /**
  * @file modbus_ddsu666.cpp

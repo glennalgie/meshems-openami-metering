@@ -26,6 +26,7 @@
 // --------------------------------------------------------------------------
 static ATM90E32 ic1[ATM90E32_NUM_BOARDS];
 static ATM90E32 ic2[ATM90E32_NUM_BOARDS];
+static bool board_ok[ATM90E32_NUM_BOARDS] = {};
 
 // CS pin arrays — one entry per board, indexed [0..ATM90E32_NUM_BOARDS-1].
 // Values come from pins.h; additional board CS pins follow ATM90E32_IC1_CS_1,
@@ -116,6 +117,7 @@ void poll_atm90e32() {
     for (int board = 0; board < ATM90E32_NUM_BOARDS; board++) {
         // Validate SPI comms — 0x0000 or 0xFFFF indicates no response.
         unsigned short sys0 = ic1[board].GetSysStatus0();
+        board_ok[board] = !(sys0 == 0x0000 || sys0 == 0xFFFF);
         if (sys0 == 0x0000 || sys0 == 0xFFFF) {
             #ifdef ENABLE_DEBUG
             Serial.printf("ATM90E32 board %d: no response (SysStatus0=0x%04X), skipping\n",
@@ -213,6 +215,7 @@ void poll_atm90e32() {
             readings[base + ch].apparent_power = apparent_power[ch] / 1000.0f;
             readings[base + ch].power_factor   = power_factor[ch];
             readings[base + ch].frequency      = freq;
+            readings[base + ch].phase          = (int8_t)(ch % 3);
             // Energy already in kWh (division done in double above).
             readings[base + ch].import_energy  = import_energy_kwh[ch];
             readings[base + ch].export_energy  = export_energy_kwh[ch];
@@ -235,6 +238,20 @@ void poll_atm90e32() {
         }
         #endif
     }
+}
+
+bool atm90e32_board_ok(int boardIndex) {
+    if (boardIndex < 0 || boardIndex >= ATM90E32_NUM_BOARDS) {
+        return false;
+    }
+    return board_ok[boardIndex];
+}
+
+float atm90e32_latest_amps(int channelIndex) {
+    if (channelIndex < 0 || channelIndex >= MODBUS_NUM_METERS) {
+        return 0.0f;
+    }
+    return readings[channelIndex].current;
 }
 
 #endif // METER_TYPE_ATM90E32

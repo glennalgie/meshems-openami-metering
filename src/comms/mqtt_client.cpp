@@ -90,15 +90,20 @@ last_bandwidth_report_time  time in secs since last report
 #include <TimeLib.h>
 #ifdef ENABLE_WIFI
   #include <WiFiMulti.h>
+  #include <comms/wifi.h>
 #endif
 #ifdef ENABLE_ETHERNET
   #include <Ethernet.h>
+  #include <comms/ethernet.h>
 #endif
 #include <core/data_model.h>
 #include <core/config.h>
 #include <ArduinoJson.h>
 #ifdef ENABLE_MODBUS_MASTER
   #include <metering/modbus_master.h>
+#endif
+#ifdef METER_TYPE_ATM90E32
+  #include <metering/meter_atm90e32.h>
 #endif
 #include <metering/sunspec_model_213.h>            // TODO breaks up into base and harmonics separated subtopics for openami
 #include <metering/sunspec_model_213_base.h>       // stays true to Sunspec base 213 data model schema
@@ -308,7 +313,8 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   // For now assume phase A. This can be extended to put the meter readings in the
   // correct phase using configuration data about which meter is on which phase.
   //TODO grab the specific cached meterId  PowerData[i] for example
-  sunSpecData.Phase= meterId; // assume 1 tenenat per phase in a 3 tenant 3ph subpanel , TODO part of stage operation and subpanel schema backed up  to a subpanel staging cloud 
+  const int phaseIndex = (meterData.phase >= 0) ? (meterData.phase % 3) : (meterId % 3);
+  sunSpecData.Phase = phaseIndex + 1; // SunSpec Model 11: 1=A, 2=B, 3=C.
   sunSpecData.PhV= meterData.voltage;
   sunSpecData.PhA = meterData.current;
   sunSpecData.PhW = meterData.active_power * 1000;
@@ -328,8 +334,50 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   snprintf(topicBuf, sizeof(topicBuf), "meter_%d", meterId);
 
   JsonDocument jsonDoc;
-  sunSpecData.toJson(jsonDoc);
   jsonDoc["timestamp"] = timestamp;
+  jsonDoc["meter_id"] = meterId;
+  jsonDoc["phase"] = phaseIndex + 1;
+  jsonDoc["phase_label"] = (phaseIndex == 0) ? "A" : ((phaseIndex == 1) ? "B" : "C");
+#ifdef ENABLE_RELAYS
+  const RelayRule relayRule = get_relay_rule((uint8_t)meterId);
+  const bool relayMapped = (meterId >= 0 && meterId < 8);
+  const bool kwhExceeded = relayMapped && relayRule.kwh_limit >= 0.0f && meterData.total_energy > relayRule.kwh_limit;
+  const bool kwExceeded = relayMapped && relayRule.kw_limit >= 0.0f && meterData.active_power > relayRule.kw_limit;
+  jsonDoc["ssr_present"] = relayMapped;
+  jsonDoc["ssr_closed"] = relayMapped ? get_i2c_ssr_channel_closed((uint8_t)meterId) : false;
+  jsonDoc["ssr_state"] = (relayMapped && get_i2c_ssr_channel_closed((uint8_t)meterId)) ? "closed" : "open";
+  jsonDoc["tenant_service_class"] = tenant_service_class_name(relayRule.service_class);
+  jsonDoc["warning_alert_given"] = relayRule.warning_alert_given;
+  jsonDoc["warning_active"] = relayRule.warning_alert_given && !relayRule.tripped;
+  jsonDoc["relay_tripped"] = relayRule.tripped;
+  jsonDoc["threshold_exceeded"] = kwhExceeded || kwExceeded;
+  jsonDoc["kwh_threshold_exceeded"] = kwhExceeded;
+  jsonDoc["kw_threshold_exceeded"] = kwExceeded;
+  jsonDoc["kwh_limit"] = relayRule.kwh_limit;
+  jsonDoc["kw_limit"] = relayRule.kw_limit;
+  jsonDoc["warning_grace_ms"] = relayRule.warning_grace_ms > 0 ? relayRule.warning_grace_ms : (uint32_t)RelayDefault_warning_grace_ms;
+  jsonDoc["excess_trip_ms"] = relayRule.excess_trip_ms > 0 ? relayRule.excess_trip_ms : (uint32_t)RelayDefault_excess_trip_ms;
+  jsonDoc["exceeded_since_ms"] = relayRule.exceeded_since_ms;
+  jsonDoc["warning_since_ms"] = relayRule.warning_since_ms;
+#else
+  jsonDoc["ssr_present"] = false;
+  jsonDoc["ssr_closed"] = false;
+  jsonDoc["ssr_state"] = "disabled";
+  jsonDoc["tenant_service_class"] = "normal";
+  jsonDoc["warning_alert_given"] = false;
+  jsonDoc["warning_active"] = false;
+  jsonDoc["relay_tripped"] = false;
+  jsonDoc["threshold_exceeded"] = false;
+  jsonDoc["kwh_threshold_exceeded"] = false;
+  jsonDoc["kw_threshold_exceeded"] = false;
+  jsonDoc["kwh_limit"] = -1.0f;
+  jsonDoc["kw_limit"] = -1.0f;
+  jsonDoc["warning_grace_ms"] = RelayDefault_warning_grace_ms;
+  jsonDoc["excess_trip_ms"] = RelayDefault_excess_trip_ms;
+  jsonDoc["exceeded_since_ms"] = 0;
+  jsonDoc["warning_since_ms"] = 0;
+#endif
+  sunSpecData.toJson(jsonDoc);
 
   mqtt_publish_json(topicBuf, &jsonDoc);
 }
@@ -361,7 +409,65 @@ void mqtt_publish_EMS_ENV(long timestamp) {
   JsonDocument jsonDoc;
   EMS_ENV_cache.toJson(jsonDoc);
   jsonDoc["timestamp"] = timestamp;
+  jsonDoc["status_ms"] = millis();
+  jsonDoc["meter_count"] = MODBUS_NUM_METERS;
+  jsonDoc["ct0_amps"] = (MODBUS_NUM_METERS > 0) ? readings[0].current : 0.0f;
+  jsonDoc["ct1_amps"] = (MODBUS_NUM_METERS > 1) ? readings[1].current : 0.0f;
+  jsonDoc["r0_current"] = (MODBUS_NUM_METERS > 0) ? readings[0].current : 0.0f;
+#ifdef METER_TYPE_ATM90E32
+  jsonDoc["cs_ok_0"] = atm90e32_board_ok(0);
+  jsonDoc["cs_ok_1"] = (ATM90E32_NUM_BOARDS > 1) ? atm90e32_board_ok(1) : false;
+#else
+  jsonDoc["cs_ok_0"] = false;
+  jsonDoc["cs_ok_1"] = false;
+#endif
+#ifdef ENABLE_WIFI
+  jsonDoc["wifi"] = wifi_client_connected() ? "up" : "down";
+  jsonDoc["wifi_up"] = wifi_client_connected();
+  jsonDoc["wifi_ip"] = wifi_client_connected() ? get_wifi_ip() : "";
+#else
+  jsonDoc["wifi"] = "down";
+  jsonDoc["wifi_up"] = false;
+  jsonDoc["wifi_ip"] = "";
+#endif
+  jsonDoc["ble"] = "down";
+  jsonDoc["ble_up"] = false;
+#ifdef ENABLE_ETHERNET
+  jsonDoc["eth"] = ethernet_connected() ? "up" : "down";
+  jsonDoc["eth_up"] = ethernet_connected();
+  jsonDoc["eth_ip"] = ethernet_connected() ? get_eth_ip() : "";
+#else
+  jsonDoc["eth"] = "down";
+  jsonDoc["eth_up"] = false;
+  jsonDoc["eth_ip"] = "";
+#endif
   mqtt_publish_json("subpanel_ENV", &jsonDoc);
+}
+
+void mqtt_publish_CircuitSetup(long timestamp) {
+  JsonDocument jsonDoc;
+  jsonDoc["timestamp"] = timestamp;
+  jsonDoc["meter_count"] = MODBUS_NUM_METERS;
+#ifdef METER_TYPE_ATM90E32
+  jsonDoc["backend"] = "ATM90E32";
+  jsonDoc["boards"] = ATM90E32_NUM_BOARDS;
+  JsonArray boards = jsonDoc["board_ok"].to<JsonArray>();
+  for (int board = 0; board < ATM90E32_NUM_BOARDS; board++) {
+    boards.add(atm90e32_board_ok(board));
+  }
+#else
+  jsonDoc["backend"] = "Modbus";
+  jsonDoc["boards"] = 0;
+#endif
+  JsonArray meters = jsonDoc["meters"].to<JsonArray>();
+  for (int meterId = 0; meterId < MODBUS_NUM_METERS; meterId++) {
+    JsonObject meter = meters.add<JsonObject>();
+    meter["meter_id"] = meterId;
+    meter["phase"] = (meterId % 3) + 1;
+    meter["phase_label"] = (meterId % 3 == 0) ? "A" : ((meterId % 3 == 1) ? "B" : "C");
+    meter["ct_channel"] = meterId;
+  }
+  mqtt_publish_json("subpanel_circuitsetup", &jsonDoc);
 }
 
 // Publish per-phase harmonic distortion report. TODO: wire real FFT or meter register data.
@@ -554,6 +660,9 @@ static void cmd_inverter(const JsonDocument&) { Serial.printf("matched \"inverte
  * {"cmd":"relay","address":7,"kwh_limit":250.0,"kw_limit":12.0}
  * {"cmd":"relay","address":3,"kwh_limit":80.0}
  * {"cmd":"relay","address":2,"state":"open"}
+ * {"cmd":"relay","address":2,"state":"close"}
+ * {"cmd":"relay","address":2,"kw_limit":3.0,"kwh_limit":12.0,"class":"essential"}
+ * {"cmd":"relay","address":2,"kw_limit":3.0,"warning_ms":60000,"excess_ms":120000}
  */
 static void cmd_relay(const JsonDocument& doc) {
     if (!doc["address"].is<int>()) {
@@ -569,32 +678,58 @@ static void cmd_relay(const JsonDocument& doc) {
     bool has_state = doc["state"].is<const char*>();
     bool has_kwh   = doc["kwh_limit"].is<float>() || doc["kwh_limit"].is<int>();
     bool has_kw    = doc["kw_limit"].is<float>()  || doc["kw_limit"].is<int>();
+    bool has_warning_ms = doc["warning_ms"].is<int>();
+    bool has_excess_ms = doc["excess_ms"].is<int>();
+    bool has_class = doc["class"].is<const char*>() || doc["service_class"].is<const char*>();
 
-    if (has_state && (has_kwh || has_kw)) {
-        Serial.println("relay cmd: 'state' is mutually exclusive with limit fields");
+    if (has_state && (has_kwh || has_kw || has_warning_ms || has_excess_ms || has_class)) {
+        Serial.println("relay cmd: 'state' is mutually exclusive with policy fields");
         return;
     }
-    if (!has_state && !has_kwh && !has_kw) {
-        Serial.println("relay cmd: must provide 'state', 'kwh_limit', or 'kw_limit'");
+    if (!has_state && !has_kwh && !has_kw && !has_warning_ms && !has_excess_ms && !has_class) {
+        Serial.println("relay cmd: must provide 'state', 'kwh_limit', 'kw_limit', or policy metadata");
         return;
     }
 
     if (has_state) {
-        // TODO: call set_ssr_channel() once implemented in i2c_ssr_bank
-        Serial.printf("relay cmd: ch %d state='%s' received (actuation not yet wired)\n",
-                      address, doc["state"].as<const char*>());
+        const char* state = doc["state"].as<const char*>();
+        bool closed;
+        if (strcmp(state, "close") == 0 || strcmp(state, "closed") == 0 || strcmp(state, "on") == 0) {
+            closed = true;
+        } else if (strcmp(state, "open") == 0 || strcmp(state, "off") == 0) {
+            closed = false;
+        } else {
+            Serial.printf("relay cmd: unsupported state '%s' (use open/close)\n", state);
+            return;
+        }
+        if (!set_i2c_ssr_channel((uint8_t)address, closed)) {
+            Serial.printf("relay cmd: ch %d state='%s' I2C write failed\n", address, state);
+            return;
+        }
+        Serial.printf("relay cmd: ch %d direct state='%s'\n", address, closed ? "close" : "open");
         return;
     }
 
-    RelayRule rule;
-    rule.kwh_limit = has_kwh ? doc["kwh_limit"].as<float>() : -1.0f;
-    rule.kw_limit  = has_kw  ? doc["kw_limit"].as<float>()  : -1.0f;
+    RelayRule rule = get_relay_rule((uint8_t)address);
+    if (has_kwh) rule.kwh_limit = doc["kwh_limit"].as<float>();
+    if (has_kw) rule.kw_limit = doc["kw_limit"].as<float>();
+    if (has_warning_ms) rule.warning_grace_ms = (uint32_t)doc["warning_ms"].as<int>();
+    if (has_excess_ms) rule.excess_trip_ms = (uint32_t)doc["excess_ms"].as<int>();
+    if (doc["class"].is<const char*>()) {
+        rule.service_class = tenant_service_class_from_string(doc["class"].as<const char*>());
+    } else if (doc["service_class"].is<const char*>()) {
+        rule.service_class = tenant_service_class_from_string(doc["service_class"].as<const char*>());
+    }
     set_relay_rule((uint8_t)address, rule);
 
     Serial.println("relay rules:");
     for (uint8_t ch = 0; ch < 8; ch++) {
         RelayRule r = get_relay_rule(ch);
-        Serial.printf("  ch %d: kwh_limit=%.2f kw_limit=%.2f\n", ch, r.kwh_limit, r.kw_limit);
+        Serial.printf("  ch %d: class=%s kwh_limit=%.2f kw_limit=%.2f warning_ms=%lu excess_ms=%lu warning=%s tripped=%s closed=%s\n",
+                      ch, tenant_service_class_name(r.service_class), r.kwh_limit, r.kw_limit,
+                      (unsigned long)r.warning_grace_ms, (unsigned long)r.excess_trip_ms,
+                      r.warning_alert_given ? "yes" : "no", r.tripped ? "yes" : "no",
+                      r.closed ? "yes" : "no");
     }
 }
 #endif // ENABLE_RELAYS
@@ -674,24 +809,51 @@ void setup_mqtt_client() {
 
 void loop_mqtt() {
   uint32_t loop_timestamp = esp_log_timestamp();
+  const unsigned long nowMs = millis();
+  static bool firstPublish = true;
+  static unsigned long lastSubpanelMs = 0;
+  static unsigned long lastMeterGroupMs = 0;
+  static unsigned long lastEnvMs = 0;
+  static unsigned long lastMfrMs = 0;
+  static unsigned long lastCircuitSetupMs = 0;
+  static unsigned long lastLeakageMs = 0;
+  static unsigned long lastHarmonicsMs = 0;
 
       //mqtt_publish(input);
       if (mqttclient.connected()) {  
       // TODO not all telemetry has to publish on same loop iteration, different rates of publish , 
       // target requirement is publish on a adaptive meaningful rate is a lean bandwidth on the meshed G3/PLC/Wireless/LORA MAC/PHY future iteration
+      auto publish_due = [&](unsigned long& lastMs, int intervalMs) {
+        if (firstPublish || intervalMs <= 0 || nowMs - lastMs >= (unsigned long)intervalMs) {
+          lastMs = nowMs;
+          return true;
+        }
+        return false;
+      };
 
        // First is to  publish Sunspec model 1 subpanel manufacture details TODO is 1 per day or per hour
+      if (publish_due(lastMfrMs, MQTTPublish_mfr_rate)) {
       mqtt_publish_EMS_MFR(loop_timestamp);  //publish Sunspec model 1 manufacture details
       #ifdef ENABLE_DEBUG
       Serial.println("Published EMS Model 1 MFR Info");
       #endif
+      }
 
       // publish real time subpanel cabinet environmetals such as temp/pressure/humid/  tamper and 
       // TODO integrate shock and  loud noise and possily street pole image snapsot on demand from mqtt command
+      if (publish_due(lastEnvMs, MQTTPublish_env_rate)) {
       mqtt_publish_EMS_ENV(loop_timestamp);
       #ifdef ENABLE_DEBUG
       Serial.println("Published subpanel environmental data");
       #endif
+      }
+
+      if (publish_due(lastCircuitSetupMs, MQTTPublish_circuitsetup_rate)) {
+      mqtt_publish_CircuitSetup(loop_timestamp);
+      #ifdef ENABLE_DEBUG
+      Serial.println("Published CircuitSetup meter mapping");
+      #endif
+      }
       
     // TODO Next publish Sunspec model xyz subpanel DER nameplate capacity  rating 
       // mqtt_publish_EMS_Rated(readings[0]);  //publish Sunspec model xyza rating details
@@ -699,25 +861,32 @@ void loop_mqtt() {
        //TODO publish 1 or 3 phase OPENAMI per subpanel peer phase and per meter/tenant energy usage (TODO scope is consumed, generated, stored, transformed, distributed);
         //TODO  IF 3phase phase subpanel setup then - assume 3 phase subpanel 
 #ifdef ENABLE_MODBUS_MASTER
+      if (publish_due(lastSubpanelMs, MQTTPublish_subpanel_rate)) {
       mqtt_publish_EMS_3Ph(readings, MODBUS_NUM_METERS);  // publish Sunspec model 213 schema for the 3 phase subpanel
       // TODO else publish single phase subpanel totalizer metrics
       //  mqtt_publish_EMS_1Ph(readings[0]);  // publish Sunspec model 213 schema for the 1 phase subpanel
       #ifdef ENABLE_DEBUG
        Serial.println("Published EMS per Phase Totalizers");
       #endif
+      }
        //next is publish EMS per phase Leakage , TODO adpative rate: if leakage is non zero or leakage fault or leakage changed
+      if (publish_due(lastLeakageMs, MQTTPublish_leakage_rate)) {
       mqtt_publish_Leakage("", readings[0]);
       #ifdef ENABLE_DEBUG
       Serial.println("Published per phase leakage");
       #endif
+      }
 
       //next is publish EMS per phase Harmonics , TODO adpative rate: if leakage is non zero or leakage fault or leakage changed
+      if (publish_due(lastHarmonicsMs, MQTTPublish_harmonics_rate)) {
       mqtt_publish_Harmonics(loop_timestamp);
       #ifdef ENABLE_DEBUG
       Serial.println("Published per phase Harmonics");
       #endif
+      }
 
     // next is loop over the subpanel per tenant meters   
+    if (publish_due(lastMeterGroupMs, MQTTPublish_meter_group_rate)) {
     for(int i=0;i<MODBUS_NUM_METERS;i++) {
           mqtt_publish_Meter(i, readings[i]);  
           // TODO add modbus node number and per meter leakage RCD Fault in the readings powerdata
@@ -725,12 +894,14 @@ void loop_mqtt() {
           Serial.printf("Published tenant meter %d\n", i);
           #endif
         }
+    }
 #endif // ENABLE_MODBUS_MASTER
+      firstPublish = false;
       } else {
         Serial.println("MQTT not connected!");
       }
-      mqtt_interval_ts = millis();
-    if (millis() - last_bandwidth_report_time >= BANDWIDTH_REPORT_INTERVAL_MS) {
+      mqtt_interval_ts = nowMs;
+    if (nowMs - last_bandwidth_report_time >= BANDWIDTH_REPORT_INTERVAL_MS) {
      mqtt_publish_BWPubOut_stats();
      mqtt_publish_BWCmdIn_stats();
      // Note: last_bandwidth_report_time is already reset inside

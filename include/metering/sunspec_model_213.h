@@ -133,22 +133,6 @@ void toJson(JsonDocument& doc) const {
         doc["THD_VphA"] = THD_VphA; doc["THD_VphB"] = THD_VphB; doc["THD_VphC"] = THD_VphC;
         doc["THD_IphA"] = THD_IphA; doc["THD_IphB"] = THD_IphB; doc["THD_IphC"] = THD_IphC;
 
-        JsonArray hVA = doc["Harmonics_VphA"].to<JsonArray>();
-        JsonArray hVB = doc["Harmonics_VphB"].to<JsonArray>();
-        JsonArray hVC = doc["Harmonics_VphC"].to<JsonArray>();
-        JsonArray hIA = doc["Harmonics_IphA"].to<JsonArray>();
-        JsonArray hIB = doc["Harmonics_IphB"].to<JsonArray>();
-        JsonArray hIC = doc["Harmonics_IphC"].to<JsonArray>();
-
-        for (int i = 0; i < 15; ++i) {
-            hVA.add(Harmonics_VphA[i]);
-            hVB.add(Harmonics_VphB[i]);
-            hVC.add(Harmonics_VphC[i]);
-            hIA.add(Harmonics_IphA[i]);
-            hIB.add(Harmonics_IphB[i]);
-            hIC.add(Harmonics_IphC[i]);
-        }
-
         doc["TotHrWhImport"] = TotHrWhImport;
         doc["TotHrWhExport"] = TotHrWhExport;
         doc["TotTOUCWhImport"] = TotTOUCWhImport;

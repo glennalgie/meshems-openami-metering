@@ -1,6 +1,8 @@
 #ifdef ENABLE_RELAYS
 #include <Arduino.h>
 #include <hw/relay.h>
+#include <hw/i2c_ssr_bank.h>
+#include <core/data_model.h>
 #include <core/pins.h>
 
 bool btn_toggle = false;
@@ -21,7 +23,7 @@ void setup_relays() {
 }
 
 void loop_relays() {
-    // Onboard SSR is event-driven via toggle_relay_1(); nothing to poll here.
+    enforce_relay_rules(readings, MODBUS_NUM_METERS);
 }
 
 #endif // ENABLE_RELAYS

@@ -1,7 +1,9 @@
 #ifndef _RGB_LEDS_H_
 #define _RGB_LEDS_H_
 
+#ifdef ENABLE_RGBWLED
 #include <FastLED.h>
+#endif
 
 #define LED_ETHERNET 0
 #define LED_BLUETOOTH 1
@@ -17,6 +19,8 @@ void setLED_WHITE();
 void setLED_OFF();
 int getNumLEDS();
 
+#ifdef ENABLE_RGBWLED
 extern CRGB leds[];  // Replaces Adafruit_NeoPixel pixel object
+#endif
 
 #endif

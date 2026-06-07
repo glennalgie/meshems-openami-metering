@@ -3,6 +3,19 @@
 ## Overview
 A development kit based on the ESP32S3 N16R8 DEV KIT C1 for energy management systems (EMS) with support for various communication protocols and peripherals. There are a few N16R8 40/42/44 pin layouts. Th EMS kit variant where the RGVW led is top center mounted just below the WROOM ESP32S3 surface mount module. All variants will work except the pins layout differs. 
 
+### 2026-06-06 modbus-testing merge iteration
+
+This branch keeps the `modbus-testing` refactor as the base layout and ports the simpler MQTT/metering behavior from the latest `hack-relays` fork:
+
+- MQTT device IDs now use the `StreetEMS_` prefix.
+- MQTT publishing now uses independent per-subtopic rates for MFR, ENV, CircuitSetup mapping, 3-phase totals, leakage, harmonics, and `meter_0..meter_n`.
+- `subpanel_ENV` now includes runtime status fields: uptime, meter count, CT current samples, ATM90E32 board health, WiFi/Ethernet state when enabled, and placeholder BLE state.
+- `subpanel_3Ph` no longer carries detailed harmonic arrays; those remain in `subpanel_harmonics`.
+- The active ATM90E32 path keeps six CT channels mapped onto the standard three LV feeder phases: meters 0/3 = phase A, 1/4 = phase B, 2/5 = phase C.
+- SunSpec model 1 options text now identifies the 6-port CircuitSetup meter configuration.
+
+Deferred for a later iteration: WiFi wrapper rename, AsyncWebServer/dashboard merge, and old flat-layout `circuitsetup_meter.cpp` API/web pieces.
+
 ### Current Status
 
 Active build flags (see `platformio.ini`): `ENABLE_OLED_DISPLAY`, `ENABLE_WIFI`, `ENABLE_MQTT`, `ENABLE_MODBUS_MASTER`, `ENABLE_DEBUG`, `METER_TYPE_ATM90E32`.

@@ -16,7 +16,7 @@ struct SunSpecModel1_EMS { //  EMS subpanel as a cookie cutter prebuilt, wired, 
     // Device Identification Fields
     char Mn[33] = "NESL EIOT Prototype";    // Manufacturer
     char Md[33] = "IP65_5KVA";    // Model
-    char Opt[64] = "3Tenant_Meter_Hiking_DDS328_ZN/S, LeakageRCMperPhase";   // Options
+    char Opt[64] = "6portCSMeter x 1, LeakageRCMperPhase";   // Options
     char Vr[17] = "01.1";    // EMS subpanel Version
     char SN[17] = "";    // TODO Serial Number - put EMS full macid here 
     char DA[17] = "";    // TODO Device Address (or other ID) - put shortenend unique MACID
