@@ -15,6 +15,7 @@ int MQTTPublish_mfr_rate = 3600000;          // subpanel_MFR: 1 hour
 int MQTTPublish_circuitsetup_rate = 300000;  // subpanel_circuitsetup: 5 min
 int MQTTPublish_leakage_rate = 600000;       // subpanel_RCMleaks: 10 min
 int MQTTPublish_harmonics_rate = 900000;     // subpanel_harmonics: 15 min
+int MQTTPublish_ssr_rate = 120000;           // subpanel_ssr: 2 min
 int MQTTPoll_rate = 60000;                   // MQTT client loop / keepalive tick
 int RelayDefault_warning_grace_ms = 60000;   // warn after 1 minute over threshold
 int RelayDefault_excess_trip_ms = 60000;     // open relay after warning persists another minute

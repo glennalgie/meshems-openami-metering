@@ -43,9 +43,10 @@
 // Meter-type-specific includes
 // --------------------------------------------------------------------------
 
-// SoftwareSerial and SHT20 are always needed: the RS-485 bus hosts the SHT20
-// temperature/humidity sensor regardless of the energy meter type.
-#include <SoftwareSerial.h>
+// SHT20 is always needed: the RS-485 bus hosts the SHT20 temperature/humidity
+// sensor regardless of the energy meter type. Use a hardware UART on ESP32-S3;
+// EspSoftwareSerial registers GPIO interrupts through the tiny ESP-IDF IPC task
+// stack and can trip a stack canary during boot.
 #include <metering/modbus_sht20.h>
 
 #if defined(METER_TYPE_ATM90E32)
@@ -79,7 +80,7 @@
 // --------------------------------------------------------------------------
 // RS-485 bus objects — always present; shared by SHT20 and Modbus meters.
 // --------------------------------------------------------------------------
-SoftwareSerial _modbus1(RS485_1_RX, RS485_1_TX); // HW519 RS-485 transceiver
+HardwareSerial _modbus1(1);                       // HW519 RS-485 transceiver
 Modbus_SHT20   sht20;                             // temperature/humidity sensor
 
 // Modbus energy meter objects — only for RTU meter types.
@@ -187,7 +188,7 @@ void setup_modbus_master() {
     gpio_reset_pin(RS485_1_TX);
     gpio_reset_pin(RS485_2_RX);
     gpio_reset_pin(RS485_2_TX);
-    _modbus1.begin(RS485_1_BAUD);
+    _modbus1.begin(RS485_1_BAUD, SERIAL_8N1, (int)RS485_1_RX, (int)RS485_1_TX);
 
     setup_modbus_clients();
 }

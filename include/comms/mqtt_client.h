@@ -36,7 +36,7 @@
 #include <PubSubClient.h>             // MQTT https://github.com/knolleary/pubsubclient PlatformIO lib: 89
 
 #ifndef MAX_DATA_LEN
-#define MAX_DATA_LEN 4096
+#define MAX_DATA_LEN 8192
 #endif
 
 #ifndef HTTP_TIMEOUT

@@ -180,7 +180,9 @@ boolean mqtt_connect()
 
   //transportClient.setTimeout(60);//(MQTT_TIMEOUT);
   mqttclient.setSocketTimeout(6);//MQTT_TIMEOUT);
-  mqttclient.setBufferSize(MAX_DATA_LEN + 200);
+  if (!mqttclient.setBufferSize(MAX_DATA_LEN + 200)) {
+    Serial.printf("MQTT: failed to resize buffer to %u bytes\n", (unsigned)(MAX_DATA_LEN + 200));
+  }
   mqttclient.setKeepAlive(180);
 
   if (strcmp(MQTT_USER, "") == 0) {
@@ -340,12 +342,17 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   jsonDoc["phase_label"] = (phaseIndex == 0) ? "A" : ((phaseIndex == 1) ? "B" : "C");
 #ifdef ENABLE_RELAYS
   const RelayRule relayRule = get_relay_rule((uint8_t)meterId);
-  const bool relayMapped = (meterId >= 0 && meterId < 8);
+  const bool relayMapped = (meterId >= 0 && meterId < get_i2c_ssr_channel_count());
+  const uint8_t relayId = relayMapped ? (uint8_t)meterId : 0;
   const bool kwhExceeded = relayMapped && relayRule.kwh_limit >= 0.0f && meterData.total_energy > relayRule.kwh_limit;
   const bool kwExceeded = relayMapped && relayRule.kw_limit >= 0.0f && meterData.active_power > relayRule.kw_limit;
   jsonDoc["ssr_present"] = relayMapped;
-  jsonDoc["ssr_closed"] = relayMapped ? get_i2c_ssr_channel_closed((uint8_t)meterId) : false;
-  jsonDoc["ssr_state"] = (relayMapped && get_i2c_ssr_channel_closed((uint8_t)meterId)) ? "closed" : "open";
+  jsonDoc["ssr_relay_id"] = relayMapped ? meterId : -1;
+  jsonDoc["ssr_board"] = relayMapped ? (relayId / I2C_SSR_CHANNELS_PER_BOARD) : -1;
+  jsonDoc["ssr_channel"] = relayMapped ? (relayId % I2C_SSR_CHANNELS_PER_BOARD) : -1;
+  jsonDoc["ssr_role"] = relayMapped ? relay_role_name(relayId) : "none";
+  jsonDoc["ssr_closed"] = relayMapped ? get_i2c_ssr_channel_closed(relayId) : false;
+  jsonDoc["ssr_state"] = (relayMapped && get_i2c_ssr_channel_closed(relayId)) ? "closed" : "open";
   jsonDoc["tenant_service_class"] = tenant_service_class_name(relayRule.service_class);
   jsonDoc["warning_alert_given"] = relayRule.warning_alert_given;
   jsonDoc["warning_active"] = relayRule.warning_alert_given && !relayRule.tripped;
@@ -361,6 +368,10 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   jsonDoc["warning_since_ms"] = relayRule.warning_since_ms;
 #else
   jsonDoc["ssr_present"] = false;
+  jsonDoc["ssr_relay_id"] = -1;
+  jsonDoc["ssr_board"] = -1;
+  jsonDoc["ssr_channel"] = -1;
+  jsonDoc["ssr_role"] = "disabled";
   jsonDoc["ssr_closed"] = false;
   jsonDoc["ssr_state"] = "disabled";
   jsonDoc["tenant_service_class"] = "normal";
@@ -468,6 +479,70 @@ void mqtt_publish_CircuitSetup(long timestamp) {
     meter["ct_channel"] = meterId;
   }
   mqtt_publish_json("subpanel_circuitsetup", &jsonDoc);
+}
+
+void mqtt_publish_SSR(long timestamp) {
+  JsonDocument jsonDoc;
+  jsonDoc["timestamp"] = timestamp;
+#ifdef ENABLE_RELAYS
+  jsonDoc["board_count"] = I2C_SSR_BOARD_COUNT;
+  jsonDoc["channels_per_board"] = I2C_SSR_CHANNELS_PER_BOARD;
+  jsonDoc["channel_count"] = get_i2c_ssr_channel_count();
+  jsonDoc["tenant_relay_count"] = SSR_TENANT_RELAY_COUNT;
+
+  JsonArray boards = jsonDoc["boards"].to<JsonArray>();
+  for (uint8_t boardId = 0; boardId < I2C_SSR_BOARD_COUNT; boardId++) {
+    JsonObject board = boards.add<JsonObject>();
+    board["board"] = boardId;
+    board["ok"] = get_i2c_ssr_board_ok(boardId);
+    board["channels"] = I2C_SSR_CHANNELS_PER_BOARD;
+  }
+
+  JsonArray relays = jsonDoc["relays"].to<JsonArray>();
+  for (uint8_t relayId = 0; relayId < get_i2c_ssr_channel_count(); relayId++) {
+    const RelayRule rule = get_relay_rule(relayId);
+    const bool closed = get_i2c_ssr_channel_closed(relayId);
+    const bool tenantRelay = relayId < SSR_TENANT_RELAY_COUNT;
+    const int meterId = (tenantRelay && relayId < MODBUS_NUM_METERS) ? relayId : -1;
+    bool kwhExceeded = false;
+    bool kwExceeded = false;
+#ifdef ENABLE_MODBUS_MASTER
+    if (meterId >= 0) {
+      kwhExceeded = rule.kwh_limit >= 0.0f && readings[meterId].total_energy > rule.kwh_limit;
+      kwExceeded = rule.kw_limit >= 0.0f && readings[meterId].active_power > rule.kw_limit;
+    }
+#endif
+
+    JsonObject relay = relays.add<JsonObject>();
+    relay["relay_id"] = relayId;
+    relay["board"] = relayId / I2C_SSR_CHANNELS_PER_BOARD;
+    relay["channel"] = relayId % I2C_SSR_CHANNELS_PER_BOARD;
+    relay["role"] = relay_role_name(relayId);
+    relay["meter_id"] = meterId;
+    relay["closed"] = closed;
+    relay["state"] = closed ? "closed" : "open";
+    relay["board_ok"] = get_i2c_ssr_board_ok(relayId / I2C_SSR_CHANNELS_PER_BOARD);
+    relay["service_class"] = tenant_service_class_name(rule.service_class);
+    relay["warning_alert_given"] = rule.warning_alert_given;
+    relay["warning_active"] = rule.warning_alert_given && !rule.tripped;
+    relay["tripped"] = rule.tripped;
+    relay["threshold_exceeded"] = kwhExceeded || kwExceeded;
+    relay["kwh_threshold_exceeded"] = kwhExceeded;
+    relay["kw_threshold_exceeded"] = kwExceeded;
+    relay["kwh_limit"] = rule.kwh_limit;
+    relay["kw_limit"] = rule.kw_limit;
+    relay["warning_grace_ms"] = rule.warning_grace_ms > 0 ? rule.warning_grace_ms : (uint32_t)RelayDefault_warning_grace_ms;
+    relay["excess_trip_ms"] = rule.excess_trip_ms > 0 ? rule.excess_trip_ms : (uint32_t)RelayDefault_excess_trip_ms;
+    relay["exceeded_since_ms"] = rule.exceeded_since_ms;
+    relay["warning_since_ms"] = rule.warning_since_ms;
+  }
+#else
+  jsonDoc["board_count"] = 0;
+  jsonDoc["channels_per_board"] = 0;
+  jsonDoc["channel_count"] = 0;
+  jsonDoc["tenant_relay_count"] = 0;
+#endif
+  mqtt_publish_json("subpanel_ssr", &jsonDoc);
 }
 
 // Publish per-phase harmonic distortion report. TODO: wire real FFT or meter register data.
@@ -579,13 +654,14 @@ void mqtt_publish_BWCmdIn_stats() { // incoming bandwidth used per streetpoleEMS
 void mqtt_publish_json(const char* subtopic, const JsonDocument* payload) {
     // Use stack buffers where possible to reduce heap fragmentation from String objects
     size_t payload_len = measureJson(*payload);
-    if (payload_len >= 1024) {
-        Serial.println("MQTT publish: payload too large");
+    if (payload_len >= MAX_DATA_LEN) {
+        Serial.printf("MQTT publish: payload too large subtopic=%s size=%u max=%u\n",
+                      subtopic, (unsigned)payload_len, (unsigned)MAX_DATA_LEN);
         return;
     }
 
     // Serialize JSON directly to char buffer - avoids intermediate String allocation
-    char data[1024];
+    static char data[MAX_DATA_LEN];
     serializeJson(*payload, data, sizeof(data));
     
     // Build topic on stack buffer - avoid String concatenation for reduced heap usage
@@ -599,7 +675,9 @@ void mqtt_publish_json(const char* subtopic, const JsonDocument* payload) {
     }
 
     if (!mqttclient.publish(topicBuf, data)) {
-        Serial.println("MQTT publish: failed");
+        Serial.printf("MQTT publish: failed topic=%s size=%u state=%d connected=%s\n",
+                      topicBuf, (unsigned)payload_len, mqttclient.state(),
+                      mqttclient.connected() ? "yes" : "no");
     } else { // update stats on mqtt bandwidth used per streetpoleEMS
         mqtt_BWPubOut_payload_bytes += payload_len;
         mqtt_BWPubOut_tcpip_bytes += payload_len + 60; // TCP/IP+MQTT overhead
@@ -654,15 +732,25 @@ static void cmd_inverter(const JsonDocument&) { Serial.printf("matched \"inverte
 
 #ifdef ENABLE_RELAYS
 /**
- * Example relay payloads:
- * {"cmd":"relay","address":0,"kwh_limit":100.0}
- * {"cmd":"relay","address":3,"kw_limit":5.5}
- * {"cmd":"relay","address":7,"kwh_limit":250.0,"kw_limit":12.0}
- * {"cmd":"relay","address":3,"kwh_limit":80.0}
- * {"cmd":"relay","address":2,"state":"open"}
- * {"cmd":"relay","address":2,"state":"close"}
- * {"cmd":"relay","address":2,"kw_limit":3.0,"kwh_limit":12.0,"class":"essential"}
- * {"cmd":"relay","address":2,"kw_limit":3.0,"warning_ms":60000,"excess_ms":120000}
+ * MQTT relay command examples on openami/<device_id>/cmd.
+ *
+ * Direct actuation:
+ *   {"cmd":"relay","address":2,"state":"open"}
+ *   {"cmd":"relay","address":2,"state":"close"}
+ *   {"cmd":"relay","address":15,"state":"open"}
+ *
+ * Tenant policy thresholds:
+ *   {"cmd":"relay","address":2,"kw_limit":3.0}
+ *   {"cmd":"relay","address":2,"kwh_limit":12.0}
+ *   {"cmd":"relay","address":2,"kw_limit":3.0,"kwh_limit":12.0,"class":"essential"}
+ *   {"cmd":"relay","address":2,"kw_limit":1.5,"class":"best_effort"}
+ *   {"cmd":"relay","address":2,"class":"null"}
+ *   {"cmd":"relay","address":2,"kw_limit":3.0,"warning_ms":60000,"excess_ms":120000}
+ *
+ * address is the SSR relay id. With the default two 8-channel SSR boards,
+ * valid addresses are 0-15. The first SSR_TENANT_RELAY_COUNT addresses map
+ * to tenant disconnect relays; remaining relays are accessory/spare outputs.
+ * Service classes: null, best_effort, normal, urgent, important, essential, critical.
  */
 static void cmd_relay(const JsonDocument& doc) {
     if (!doc["address"].is<int>()) {
@@ -670,8 +758,8 @@ static void cmd_relay(const JsonDocument& doc) {
         return;
     }
     int address = doc["address"].as<int>();
-    if (address < 0 || address > 7) {
-        Serial.printf("relay cmd: address %d out of range 0-7\n", address);
+    if (address < 0 || address >= get_i2c_ssr_channel_count()) {
+        Serial.printf("relay cmd: address %d out of range 0-%u\n", address, get_i2c_ssr_channel_count() - 1);
         return;
     }
 
@@ -723,7 +811,7 @@ static void cmd_relay(const JsonDocument& doc) {
     set_relay_rule((uint8_t)address, rule);
 
     Serial.println("relay rules:");
-    for (uint8_t ch = 0; ch < 8; ch++) {
+    for (uint8_t ch = 0; ch < get_i2c_ssr_channel_count(); ch++) {
         RelayRule r = get_relay_rule(ch);
         Serial.printf("  ch %d: class=%s kwh_limit=%.2f kw_limit=%.2f warning_ms=%lu excess_ms=%lu warning=%s tripped=%s closed=%s\n",
                       ch, tenant_service_class_name(r.service_class), r.kwh_limit, r.kw_limit,
@@ -818,6 +906,7 @@ void loop_mqtt() {
   static unsigned long lastCircuitSetupMs = 0;
   static unsigned long lastLeakageMs = 0;
   static unsigned long lastHarmonicsMs = 0;
+  static unsigned long lastSsrMs = 0;
 
       //mqtt_publish(input);
       if (mqttclient.connected()) {  
@@ -854,6 +943,15 @@ void loop_mqtt() {
       Serial.println("Published CircuitSetup meter mapping");
       #endif
       }
+
+#ifdef ENABLE_RELAYS
+      if (publish_due(lastSsrMs, MQTTPublish_ssr_rate)) {
+      mqtt_publish_SSR(loop_timestamp);
+      #ifdef ENABLE_DEBUG
+      Serial.println("Published SSR relay state");
+      #endif
+      }
+#endif
       
     // TODO Next publish Sunspec model xyz subpanel DER nameplate capacity  rating 
       // mqtt_publish_EMS_Rated(readings[0]);  //publish Sunspec model xyza rating details

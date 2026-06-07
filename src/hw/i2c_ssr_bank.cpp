@@ -13,8 +13,24 @@
 #define I2C_SSR_ACTIVE_LOW 1
 #endif
 
-static uint8_t s_shadow = 0x00;
-static RelayRule relay_rules[8];
+#ifndef PCF8574_I2C_ADDR_0
+#define PCF8574_I2C_ADDR_0 PCF8574_I2C_ADDR
+#endif
+
+#ifndef PCF8574_I2C_ADDR_1
+#define PCF8574_I2C_ADDR_1 0x26
+#endif
+
+static const uint8_t ssr_board_addresses[I2C_SSR_BOARD_COUNT] = {
+    PCF8574_I2C_ADDR_0,
+#if I2C_SSR_BOARD_COUNT > 1
+    PCF8574_I2C_ADDR_1,
+#endif
+};
+
+static uint8_t s_shadow[I2C_SSR_BOARD_COUNT] = {};
+static bool ssr_board_ok[I2C_SSR_BOARD_COUNT] = {};
+static RelayRule relay_rules[I2C_SSR_MAX_CHANNELS];
 
 static uint8_t to_bus_value(uint8_t logical) {
 #if I2C_SSR_ACTIVE_LOW
@@ -24,10 +40,19 @@ static uint8_t to_bus_value(uint8_t logical) {
 #endif
 }
 
-static bool pcf8574_write(uint8_t value) {
-    Wire.beginTransmission(PCF8574_I2C_ADDR);
+static bool pcf8574_write(uint8_t board, uint8_t value) {
+    if (board >= I2C_SSR_BOARD_COUNT) return false;
+    Wire.beginTransmission(ssr_board_addresses[board]);
     Wire.write(value);
     return Wire.endTransmission() == 0;
+}
+
+static uint8_t relay_board(uint8_t channel) {
+    return channel / I2C_SSR_CHANNELS_PER_BOARD;
+}
+
+static uint8_t relay_board_channel(uint8_t channel) {
+    return channel % I2C_SSR_CHANNELS_PER_BOARD;
 }
 
 static bool relay_threshold_exceeded(const RelayRule& rule, const PowerData& reading) {
@@ -75,26 +100,35 @@ void setup_i2c_ssr_bank() {
     Wire.begin(I2C_SSR_SDA_GPIO, I2C_SSR_SCL_GPIO);
     Wire.setClock(100000);
     i2c_scan_bus();
-    s_shadow = 0x00;  // all channels logically off
-    for (uint8_t ch = 0; ch < 8; ch++) {
+    for (uint8_t board = 0; board < I2C_SSR_BOARD_COUNT; board++) {
+        s_shadow[board] = 0x00;  // all channels logically off
+    }
+    for (uint8_t ch = 0; ch < I2C_SSR_MAX_CHANNELS; ch++) {
         relay_rules[ch].closed = false;
     }
-    if (!pcf8574_write(to_bus_value(s_shadow))) {
-        Serial.printf("I2C SSR: no ACK at 0x%02X - set PCF8574_I2C_ADDR to a address from the scan, or fix GPIOs\n",
-                      PCF8574_I2C_ADDR);
-    } else {
-        Serial.println("I2C SSR: PCF8574 ok. Serial: 0-7=toggle, a=all off, ?=help");
+    for (uint8_t board = 0; board < I2C_SSR_BOARD_COUNT; board++) {
+        ssr_board_ok[board] = pcf8574_write(board, to_bus_value(s_shadow[board]));
+        if (!ssr_board_ok[board]) {
+            Serial.printf("I2C SSR: board %u no ACK at 0x%02X - set PCF8574_I2C_ADDR_%u or fix GPIOs/wiring\n",
+                          board, ssr_board_addresses[board], board);
+        } else {
+            Serial.printf("I2C SSR: board %u PCF8574 ok at 0x%02X\n", board, ssr_board_addresses[board]);
+        }
     }
+    Serial.println("I2C SSR: Serial: 0-7 toggle board0 channels, a all off, ? help");
 }
 
 bool set_i2c_ssr_channel(uint8_t channel, bool closed) {
-    if (channel > 7) return false;
+    if (channel >= I2C_SSR_MAX_CHANNELS) return false;
+    const uint8_t board = relay_board(channel);
+    const uint8_t boardChannel = relay_board_channel(channel);
     if (closed) {
-        s_shadow |= (uint8_t)(1u << channel);
+        s_shadow[board] |= (uint8_t)(1u << boardChannel);
     } else {
-        s_shadow &= (uint8_t)~(1u << channel);
+        s_shadow[board] &= (uint8_t)~(1u << boardChannel);
     }
-    const bool ok = pcf8574_write(to_bus_value(s_shadow));
+    const bool ok = pcf8574_write(board, to_bus_value(s_shadow[board]));
+    ssr_board_ok[board] = ok;
     if (ok) {
         relay_rules[channel].closed = closed;
         if (closed) {
@@ -108,25 +142,38 @@ bool set_i2c_ssr_channel(uint8_t channel, bool closed) {
 }
 
 bool get_i2c_ssr_channel_closed(uint8_t channel) {
-    if (channel > 7) return false;
-    return (s_shadow & (uint8_t)(1u << channel)) != 0;
+    if (channel >= I2C_SSR_MAX_CHANNELS) return false;
+    const uint8_t board = relay_board(channel);
+    const uint8_t boardChannel = relay_board_channel(channel);
+    return (s_shadow[board] & (uint8_t)(1u << boardChannel)) != 0;
+}
+
+bool get_i2c_ssr_board_ok(uint8_t board) {
+    if (board >= I2C_SSR_BOARD_COUNT) return false;
+    return ssr_board_ok[board];
+}
+
+uint8_t get_i2c_ssr_channel_count() {
+    return I2C_SSR_MAX_CHANNELS;
 }
 
 void loop_i2c_ssr_bank_blink_test() {
     static unsigned long lastBlink = 0;
     if (millis() - lastBlink > 500) {
         lastBlink = millis();
-        s_shadow ^= (uint8_t)(1u << 7);
-        if (pcf8574_write(to_bus_value(s_shadow))) {
-            Serial.printf("SSR1 -> %s\n", (s_shadow & (1u << 7)) ? "ON" : "OFF");
+        s_shadow[0] ^= (uint8_t)(1u << 7);
+        if (pcf8574_write(0, to_bus_value(s_shadow[0]))) {
+            ssr_board_ok[0] = true;
+            Serial.printf("SSR1 -> %s\n", (s_shadow[0] & (1u << 7)) ? "ON" : "OFF");
         } else {
+            ssr_board_ok[0] = false;
             Serial.println("I2C write failed");
         }
     }
 }
 
 bool set_relay_rule(uint8_t channel, RelayRule rule) {
-    if (channel > 7) return false;
+    if (channel >= I2C_SSR_MAX_CHANNELS) return false;
     rule.warning_alert_given = false;
     rule.tripped = false;
     rule.closed = get_i2c_ssr_channel_closed(channel);
@@ -137,13 +184,13 @@ bool set_relay_rule(uint8_t channel, RelayRule rule) {
 }
 
 const RelayRule get_relay_rule(uint8_t channel) {
-    if (channel > 7) return RelayRule{};
+    if (channel >= I2C_SSR_MAX_CHANNELS) return RelayRule{};
     return relay_rules[channel];
 }
 
 void enforce_relay_rules(const PowerData readings[], int count) {
     const unsigned long now = millis();
-    const int limit = (count < 8) ? count : 8;
+    const int limit = (count < I2C_SSR_MAX_CHANNELS) ? count : I2C_SSR_MAX_CHANNELS;
     for (int ch = 0; ch < limit; ch++) {
         RelayRule& rule = relay_rules[ch];
         if (rule.tripped || (rule.kwh_limit < 0.0f && rule.kw_limit < 0.0f)) {
@@ -184,6 +231,10 @@ void enforce_relay_rules(const PowerData readings[], int count) {
 
 TenantServiceClass tenant_service_class_from_string(const char* value) {
     if (value == nullptr) return TENANT_SERVICE_NORMAL;
+    if (equals_ignore_case(value, "null")) return TENANT_SERVICE_NULL;
+    if (equals_ignore_case(value, "best_effort")) return TENANT_SERVICE_BEST_EFFORT;
+    if (equals_ignore_case(value, "best-effort")) return TENANT_SERVICE_BEST_EFFORT;
+    if (equals_ignore_case(value, "besteffort")) return TENANT_SERVICE_BEST_EFFORT;
     if (equals_ignore_case(value, "critical")) return TENANT_SERVICE_CRITICAL;
     if (equals_ignore_case(value, "essential")) return TENANT_SERVICE_ESSENTIAL;
     if (equals_ignore_case(value, "important")) return TENANT_SERVICE_IMPORTANT;
@@ -197,10 +248,17 @@ const char* tenant_service_class_name(TenantServiceClass value) {
         case TENANT_SERVICE_ESSENTIAL: return "essential";
         case TENANT_SERVICE_IMPORTANT: return "important";
         case TENANT_SERVICE_URGENT: return "urgent";
+        case TENANT_SERVICE_BEST_EFFORT: return "best_effort";
+        case TENANT_SERVICE_NULL: return "null";
         case TENANT_SERVICE_NORMAL:
         default:
             return "normal";
     }
+}
+
+const char* relay_role_name(uint8_t relayId) {
+    if (relayId < SSR_TENANT_RELAY_COUNT) return "tenant_disconnect";
+    return "accessory";
 }
 
 void loop_i2c_ssr_bank_serial() {
@@ -211,14 +269,19 @@ void loop_i2c_ssr_bank_serial() {
             bool closed = !get_i2c_ssr_channel_closed((uint8_t)bit);
             if (set_i2c_ssr_channel((uint8_t)bit, closed)) {
                 Serial.printf("ch %d -> %s (mask 0x%02X)\n", bit,
-                              (s_shadow & (1u << bit)) ? "ON" : "OFF", s_shadow);
+                              (s_shadow[0] & (1u << bit)) ? "ON" : "OFF", s_shadow[0]);
             } else {
                 Serial.println("I2C write failed");
             }
         } else if (c == 'a' || c == 'A') {
-            s_shadow = 0x00;
-            if (pcf8574_write(to_bus_value(s_shadow))) {
-                for (uint8_t ch = 0; ch < 8; ch++) {
+            bool ok = true;
+            for (uint8_t board = 0; board < I2C_SSR_BOARD_COUNT; board++) {
+                s_shadow[board] = 0x00;
+                ssr_board_ok[board] = pcf8574_write(board, to_bus_value(s_shadow[board]));
+                ok = ok && ssr_board_ok[board];
+            }
+            if (ok) {
+                for (uint8_t ch = 0; ch < I2C_SSR_MAX_CHANNELS; ch++) {
                     relay_rules[ch].closed = false;
                 }
                 Serial.println("all channels off");

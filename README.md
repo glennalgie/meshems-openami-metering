@@ -69,6 +69,58 @@ The PCF8574 P0 bit maps to **relay 8** on the IOT MUG board (reversed order):
 
 The firmware uses active-low logic (`I2C_SSR_ACTIVE_LOW 1`) which matches the IOT MUG board.
 
+#### MQTT Relay Commands
+
+Relay commands are sent to the device command topic:
+
+```text
+openami/<device_id>/cmd
+```
+
+Direct relay actuation examples:
+
+```json
+{"cmd":"relay","address":2,"state":"open"}
+```
+
+```json
+{"cmd":"relay","address":2,"state":"close"}
+```
+
+```json
+{"cmd":"relay","address":15,"state":"open"}
+```
+
+Tenant relay threshold examples:
+
+```json
+{"cmd":"relay","address":2,"kw_limit":3.0}
+```
+
+```json
+{"cmd":"relay","address":2,"kwh_limit":12.0}
+```
+
+```json
+{"cmd":"relay","address":2,"kw_limit":3.0,"kwh_limit":12.0,"class":"essential"}
+```
+
+```json
+{"cmd":"relay","address":2,"kw_limit":1.5,"class":"best_effort"}
+```
+
+```json
+{"cmd":"relay","address":2,"class":"null"}
+```
+
+```json
+{"cmd":"relay","address":2,"kw_limit":3.0,"warning_ms":60000,"excess_ms":120000}
+```
+
+`address` is the SSR relay id. With the default two 8-channel SSR boards, valid addresses are `0` through `15`. The first `SSR_TENANT_RELAY_COUNT` relays default to tenant disconnect outputs; remaining relays are accessory/spare outputs. Relay state and policy status are published in `subpanel_ssr`, while each `meter_N` payload includes the compact relay mapping/status for that tenant.
+
+Supported tenant service classes are `null`, `best_effort`, `normal`, `urgent`, `important`, `essential`, and `critical`.
+
 ---
 
 ### Upload & Serial Monitor (macOS)
