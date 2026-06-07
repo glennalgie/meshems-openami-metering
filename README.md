@@ -32,11 +32,13 @@ Active build flags (see `platformio.ini`): `ENABLE_OLED_DISPLAY`, `ENABLE_WIFI`,
 
 ### Known Issues
 
-#### ATM90E32 CS Pin Placeholders
+#### TODO: PCB 865B.4 Pin Review
 
-`include/pins.h` defines `ATM90E32_IC1_CS = GPIO 33` and `ATM90E32_IC2_CS = GPIO 34` as placeholders. These **must** be verified against the actual NESL 865B board schematic before field use. Wrong CS pins will cause silent SPI failures (the ICs will not respond, and all readings will be zero).
+The schematic review found that OLED wiring in `include/core/pins.h` appears correct for `BOARD_VER_V3`: `OLED-CS` -> GPIO17, `OLED-DC` -> GPIO18, `OLED-RST` -> GPIO8, `CLK` -> GPIO12, and `MOSI` -> GPIO11.
 
-**Fix:** Check the schematic for the CS lines routed to the ATM90E32 headers and update `ATM90E32_IC1_CS` / `ATM90E32_IC2_CS` in `include/pins.h` accordingly.
+Do not enable OLED with the current ATM90E32 pin map yet. `ATM90E32_IC2_CS` is currently set to GPIO18, but the schematic labels GPIO18 as `OLED-DC`. For the first ATM90E32 add-on pair, the schematic appears to map `CS1-1` -> GPIO15 and `CS1-2` -> GPIO16, so `ATM90E32_IC2_CS` likely needs GPIO16 after board-level acknowledgement.
+
+CAN also needs revalidation before enabling: current `CAN0_SI` = GPIO16 overlaps the likely ATM90E32 `CS1-2`, and `CAN0_SCK` = GPIO17 overlaps `OLED-CS`.
 
 ---
 

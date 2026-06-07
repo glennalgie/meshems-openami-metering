@@ -157,6 +157,10 @@
     // ==================== CAN INTERFACE (MCP2515) ==================
     // Uses a separate SPIClass (canSPI) — does NOT share pins with the OLED SPI bus
     // (OLED occupies GPIO 11/12/13 via the default SPI instance).
+    // TODO(PCB 865B.4 schematic): current CAN pin choices conflict if CAN is
+    // enabled with the active OLED/ATM90E32 wiring. CAN0_SI=GPIO16 appears to
+    // overlap ATM90E32 CS1-2, and CAN0_SCK=GPIO17 overlaps OLED-CS. Keep
+    // ENABLE_CAN disabled until CAN wiring is revalidated.
     #define CAN0_CS     GPIO_NUM_41  // SPI chip select
     #define CAN0_SO     GPIO_NUM_45  // SPI MISO
     #define CAN0_SI     GPIO_NUM_16  // SPI MOSI
@@ -175,6 +179,11 @@
     //   ATM90E32_IC1_CS_1, ATM90E32_IC2_CS_1   (board 2)
     //   ATM90E32_IC1_CS_2, ATM90E32_IC2_CS_2   (board 3)
     // etc., and increase ATM90E32_NUM_BOARDS in platformio.ini accordingly.
+    // TODO(PCB 865B.4 schematic): ATM90E32_IC2_CS is currently GPIO18, but the
+    // schematic labels GPIO18 as OLED-DC. For the first ATM90E32 add-on pair,
+    // the schematic appears to map CS1-1 -> GPIO15 and CS1-2 -> GPIO16, so IC2
+    // CS likely needs GPIO16 before OLED is enabled. Do not change this without
+    // board-level acknowledgement.
     #define ATM90E32_MOSI        GPIO_NUM_11  // Shared SPI bus (OLED/SD)
     #define ATM90E32_MISO        GPIO_NUM_13  // Shared SPI bus (OLED/SD)
     #define ATM90E32_CLK         GPIO_NUM_12  // Shared SPI bus (OLED/SD)
