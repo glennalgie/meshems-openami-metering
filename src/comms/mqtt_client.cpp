@@ -120,6 +120,10 @@ last_bandwidth_report_time  time in secs since last report
 // Debug MQTT serial output is controlled by the project-wide ENABLE_DEBUG flag.
 // Do not add a separate ENABLE_DEBUG_MQTT define here.
 
+#ifndef OPENAMI_FW_VERSION
+#define OPENAMI_FW_VERSION "0.0"
+#endif
+
 // some mqtt banditch stats to include hourly/daily as its own publish
 unsigned long mqtt_BWPubOut_payload_bytes = 0;
 unsigned long mqtt_BWPubOut_tcpip_bytes = 0;
@@ -149,6 +153,9 @@ String topic_cmd;             // command topic (for 'southbound' commands)
 
 // Function prototype for mqtt_publish_json
 void mqtt_publish_json(const char* subtopic, const JsonDocument* payload);
+void mqtt_publish_retained_value(const char* subtopic, const char* payload);
+void mqtt_clear_retained_value(const char* subtopic);
+void mqtt_publish_openami_status(const char* status);
 
 void generateTopics() {
   // Generate device topic: MQTT_TOPIC/device_id/
@@ -185,11 +192,19 @@ boolean mqtt_connect()
   }
   mqttclient.setKeepAlive(180);
 
+  char statusTopic[256];
+  int status_topic_len = snprintf(statusTopic, sizeof(statusTopic), "%sstatus", topic_device.c_str());
+  if (status_topic_len < 0 || status_topic_len >= (int)sizeof(statusTopic)) {
+    Serial.println("MQTT: status topic buffer overflow");
+    return false;
+  }
+
+  const char* disconnectedPayload = "{\"schema\":\"status_v1\",\"status\":\"disconnected\",\"ts\":0,\"fw\":\"" OPENAMI_FW_VERSION "\",\"ems_status\":0,\"uptime_s\":0,\"ems_config\":0,\"ems_error\":0,\"ems_temp\":0,\"ems_tamper\":0,\"mqtt_connected\":false}";
   if (strcmp(MQTT_USER, "") == 0) {
     //allows for anonymous connection
-    mqttclient.connect(getDeviceID()); // Attempt to connect
+    mqttclient.connect(getDeviceID(), statusTopic, 0, true, disconnectedPayload); // Attempt to connect
   } else {
-    mqttclient.connect(getDeviceID(), MQTT_USER, MQTT_PW); // Attempt to connect
+    mqttclient.connect(getDeviceID(), MQTT_USER, MQTT_PW, statusTopic, 0, true, disconnectedPayload); // Attempt to connect
   }
 
   if (mqttclient.state() == 0) {
@@ -207,7 +222,8 @@ boolean mqtt_connect()
       }
     }
     Serial.printf("MQTT: SUBSCRIBED TO COMMAND TOPIC: %s\r\n", topic_cmd.c_str());
-    //  mqttclient.publish(getDeviceTopic().c_str(), "connected"); // Once connected, publish an announcement..
+    mqtt_clear_retained_value("status/status");
+    mqtt_publish_openami_status("connected");
   } else {
     Serial.println("MQTT failed: ");
     Serial.println(mqttclient.state());
@@ -391,6 +407,51 @@ void mqtt_publish_Meter(int meterId, const PowerData& meterData) {
   sunSpecData.toJson(jsonDoc);
 
   mqtt_publish_json(topicBuf, &jsonDoc);
+}
+
+void mqtt_publish_openami_status(const char* status) {
+  JsonDocument jsonDoc;
+  const bool isConnectedStatus = (strcmp(status, "connected") == 0) && mqttclient.connected();
+  jsonDoc["schema"] = "status_v1";
+  jsonDoc["ts"] = now();
+  jsonDoc["fw"] = OPENAMI_FW_VERSION;
+  jsonDoc["ems_status"] = 0;
+  jsonDoc["uptime_s"] = millis() / 1000UL;
+  jsonDoc["ems_config"] = 0;
+  jsonDoc["ems_error"] = 0;
+#ifdef ENABLE_MODBUS_MASTER
+  jsonDoc["ems_temp"] = (get_sht20_success_count() > 0) ? get_sht20_temperature() : 0;
+#else
+  jsonDoc["ems_temp"] = 0;
+#endif
+  jsonDoc["ems_tamper"] = 0;
+  jsonDoc["mqtt_connected"] = isConnectedStatus;
+  jsonDoc["device_id"] = getDeviceID();
+  jsonDoc["topic_root"] = MQTT_TOPIC;
+  jsonDoc["broker"] = MQTT_SERVER;
+  jsonDoc["status_ms"] = millis();
+  jsonDoc["publish_count"] = mqtt_publish_count;
+  jsonDoc["cmd_count"] = mqtt_cmd_count;
+#ifdef ENABLE_WIFI
+  jsonDoc["wifi"] = wifi_client_connected() ? "up" : "down";
+  jsonDoc["wifi_up"] = wifi_client_connected();
+  jsonDoc["wifi_ip"] = wifi_client_connected() ? get_wifi_ip() : "";
+#else
+  jsonDoc["wifi"] = "down";
+  jsonDoc["wifi_up"] = false;
+  jsonDoc["wifi_ip"] = "";
+#endif
+#ifdef ENABLE_ETHERNET
+  jsonDoc["eth"] = ethernet_connected() ? "up" : "down";
+  jsonDoc["eth_up"] = ethernet_connected();
+  jsonDoc["eth_ip"] = ethernet_connected() ? get_eth_ip() : "";
+#else
+  jsonDoc["eth"] = "down";
+  jsonDoc["eth_up"] = false;
+  jsonDoc["eth_ip"] = "";
+#endif
+  mqtt_publish_json("status", &jsonDoc);
+  mqtt_publish_retained_value("state_mqtt", status);
 }
 
 // Publish SunSpec Model 1 manufacturer/nameplate data for this subpanel.
@@ -674,7 +735,7 @@ void mqtt_publish_json(const char* subtopic, const JsonDocument* payload) {
         return;
     }
 
-    if (!mqttclient.publish(topicBuf, data)) {
+    if (!mqttclient.publish(topicBuf, data, true)) {
         Serial.printf("MQTT publish: failed topic=%s size=%u state=%d connected=%s\n",
                       topicBuf, (unsigned)payload_len, mqttclient.state(),
                       mqttclient.connected() ? "yes" : "no");
@@ -686,6 +747,55 @@ void mqtt_publish_json(const char* subtopic, const JsonDocument* payload) {
 
 #ifdef ENABLE_DEBUG
     Serial.printf("topic: %s, data: %s\n", topicBuf, data);
+#endif
+}
+
+
+void mqtt_publish_retained_value(const char* subtopic, const char* payload) {
+    char topicBuf[256];
+    int topic_len = snprintf(topicBuf, sizeof(topicBuf), "%s%s",
+                             topic_device.c_str(), subtopic);
+
+    if (topic_len < 0 || topic_len >= (int)sizeof(topicBuf)) {
+        Serial.println("MQTT publish: topic buffer overflow");
+        return;
+    }
+
+    const size_t payload_len = strlen(payload);
+    if (!mqttclient.publish(topicBuf, payload, true)) {
+        Serial.printf("MQTT publish: failed topic=%s size=%u state=%d connected=%s\n",
+                      topicBuf, (unsigned)payload_len, mqttclient.state(),
+                      mqttclient.connected() ? "yes" : "no");
+    } else {
+        mqtt_BWPubOut_payload_bytes += payload_len;
+        mqtt_BWPubOut_tcpip_bytes += payload_len + 60;
+        mqtt_publish_count++;
+    }
+
+#ifdef ENABLE_DEBUG
+    Serial.printf("topic: %s, data: %s\n", topicBuf, payload);
+#endif
+}
+
+
+void mqtt_clear_retained_value(const char* subtopic) {
+    char topicBuf[256];
+    int topic_len = snprintf(topicBuf, sizeof(topicBuf), "%s%s",
+                             topic_device.c_str(), subtopic);
+
+    if (topic_len < 0 || topic_len >= (int)sizeof(topicBuf)) {
+        Serial.println("MQTT retained clear: topic buffer overflow");
+        return;
+    }
+
+    if (!mqttclient.publish(topicBuf, "", true)) {
+        Serial.printf("MQTT retained clear: failed topic=%s state=%d connected=%s\n",
+                      topicBuf, mqttclient.state(),
+                      mqttclient.connected() ? "yes" : "no");
+    }
+
+#ifdef ENABLE_DEBUG
+    Serial.printf("MQTT retained clear: topic: %s\n", topicBuf);
 #endif
 }
 
@@ -712,7 +822,7 @@ void mqtt_publish_comma_sep_colon_delim(const char* subtopic, const char * data)
       mqtt_data[pos] = 0;
       data += pos;
 
-      if (!mqttclient.publish(topicBuf, mqtt_data)) {
+      if (!mqttclient.publish(topicBuf, mqtt_data, true)) {
        Serial.println("MQTT publish: failed");
       }
 #ifdef ENABLE_DEBUG
@@ -907,6 +1017,7 @@ void loop_mqtt() {
   static unsigned long lastLeakageMs = 0;
   static unsigned long lastHarmonicsMs = 0;
   static unsigned long lastSsrMs = 0;
+  static unsigned long lastStatusMs = 0;
 
       //mqtt_publish(input);
       if (mqttclient.connected()) {  
@@ -934,6 +1045,13 @@ void loop_mqtt() {
       mqtt_publish_EMS_ENV(loop_timestamp);
       #ifdef ENABLE_DEBUG
       Serial.println("Published subpanel environmental data");
+      #endif
+      }
+
+      if (publish_due(lastStatusMs, MQTTPublish_env_rate)) {
+      mqtt_publish_openami_status("connected");
+      #ifdef ENABLE_DEBUG
+      Serial.println("Published OpenAMI connected status");
       #endif
       }
 
@@ -1024,6 +1142,7 @@ void maintain_mqtt_connection() {
 void mqtt_restart()
 {
   if (mqttclient.connected()) {
+    mqtt_publish_openami_status("disconnected");
     mqttclient.disconnect();
   }
 }
@@ -1039,13 +1158,13 @@ void mqtt_publish_door_opened() {
   // Buffer sized to hold topic_device (~40 chars) + "/door" + null terminator.
   char buf[128] = {0};
   snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "open", 0);
+  mqttclient.publish(buf, "open", true);
 }
 
 void mqtt_publish_door_closed() {
   char buf[128] = {0};
   snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "closed", 0);
+  mqttclient.publish(buf, "closed", true);
 }
 
 #endif // ENABLE_MQTT
