@@ -210,7 +210,7 @@ bool setup_wifi() {
   int attemptsRemaining = 1;
   wl_status_t status = WiFi.status();
   while (!wifi_client_connected() && (attemptsRemaining-- > 0)) {
-    status = (wl_status_t)wifiMulti.run(WIFI_MULTI_RUN_TIMEOUT_MS, true);
+    status = (wl_status_t)wifiMulti.run(WIFI_MULTI_RUN_TIMEOUT_MS);
     if (wifi_client_connected() || status == WL_CONNECTED) {
       break;
     }
@@ -238,7 +238,7 @@ void loop_wifi() {
   lastWifiReconnectAttempt = now;
   addConfiguredAccessPoints();
   Serial.printf("wifi reconnecting with WiFiMulti, default SSID: %s\n", WIFI_SSID);
-  wl_status_t status = (wl_status_t)wifiMulti.run(WIFI_MULTI_RUN_TIMEOUT_MS, true);
+  wl_status_t status = (wl_status_t)wifiMulti.run(WIFI_MULTI_RUN_TIMEOUT_MS);
   if (!wifi_client_connected()) {
     Serial.printf("wifi reconnect pending: status=%s ssid=%s\n", wifiStatusName(status), WIFI_SSID);
   }
