@@ -7,9 +7,13 @@
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"
 #define MQTT_PUBLISH_INTERVAL   30000
-#define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
-#define MQTT_USER               "public"                  // leave empty for test.mosquitto.org
-#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org   
+// Local Mosquitto broker on this PC's WiFi IP (anonymous connection).
+#define MQTT_SERVER             "10.0.0.116"              // local PC running Mosquitto
+#define MQTT_USER               ""                        // empty = anonymous (local Mosquitto)
+#define MQTT_PW                 ""
+//#define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
+//#define MQTT_USER               "public"                  // leave empty for test.mosquitto.org
+//#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org
 
 // DTM485 custom Ascii on serial on rsa485 -  Serial Pins and Baud Rate
 #define DTM485_SERIAL Serial2
