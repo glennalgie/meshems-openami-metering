@@ -1,0 +1,202 @@
+<title>S1 Wiring — MD0630 leakage sensor → PC</title>
+<style>
+  :root{
+    --bg:#e9edf3; --surface:#ffffff; --card:#f7f9fc; --ink:#141b26; --muted:#5a6675;
+    --line:#d6dee8; --accent:#2f6df6;
+    --w-vcc:#e5484d; --w-gnd:#334155; --w-tx:#16a34a; --w-rx:#e08a2b; --w-pu:#8b5cf6; --usb:#64748b;
+    --warn:#c2410c; --ok:#0f9d6b;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d131f; --surface:#141c29; --card:#0f1725; --ink:#e8edf4; --muted:#93a0b2;
+      --line:#27313f; --accent:#5b8bff;
+      --w-gnd:#cbd5e1; --w-rx:#eba24d; --usb:#8593a5;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d131f; --surface:#141c29; --card:#0f1725; --ink:#e8edf4; --muted:#93a0b2;
+    --line:#27313f; --accent:#5b8bff; --w-gnd:#cbd5e1; --w-rx:#eba24d; --usb:#8593a5;
+  }
+  :root[data-theme="light"]{
+    --bg:#e9edf3; --surface:#ffffff; --card:#f7f9fc; --ink:#141b26; --muted:#5a6675;
+    --line:#d6dee8; --accent:#2f6df6; --w-gnd:#334155; --w-rx:#e08a2b; --usb:#64748b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:40px 22px 64px;}
+  header{display:flex;flex-direction:column;gap:6px;margin-bottom:26px;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;}
+  h1{font-size:clamp(22px,3.4vw,30px);margin:0;line-height:1.15;text-wrap:balance;letter-spacing:-.01em;}
+  .sub{color:var(--muted);font-size:15px;max-width:64ch;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:20px;box-shadow:0 1px 0 rgba(0,0,0,.02);}
+  .diagram-wrap{overflow-x:auto;}
+  svg.diagram{display:block;width:100%;min-width:640px;height:auto;}
+  .blk{fill:var(--card);stroke:var(--line);stroke-width:1.5;}
+  .blk-title{fill:var(--ink);font-family:var(--sans);font-weight:650;}
+  .blk-sub{fill:var(--muted);font-family:var(--sans);}
+  .pinlbl{fill:var(--ink);font-family:var(--mono);font-size:14px;}
+  .pinlbl.mut{fill:var(--muted);}
+  .tag{fill:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.04em;}
+  .wire{fill:none;stroke-width:4.5;stroke-linecap:round;}
+  .divln{stroke:var(--line);stroke-width:1.2;}
+  .grid{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;margin-top:22px;}
+  @media (max-width:760px){.grid{grid-template-columns:1fr;}}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+    margin:0 0 12px;font-weight:650;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;}
+  td.pin{font-family:var(--mono);font-weight:600;white-space:nowrap;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle;}
+  .mono{font-family:var(--mono);}
+  ul.rules{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;}
+  ul.rules li{display:flex;gap:10px;font-size:14px;}
+  ul.rules .ic{flex:0 0 auto;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+    font-size:12px;font-weight:700;color:#fff;margin-top:1px;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px 18px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+  .legend span{display:inline-flex;align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .pull{margin-top:14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);}
+  .pull .row{font-family:var(--mono);font-size:13px;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .res{color:var(--w-pu);font-weight:700;}
+  .alt{margin-top:22px;padding:14px 16px;border-left:3px solid var(--accent);background:var(--card);
+    border-radius:0 12px 12px 0;font-size:14px;}
+  .alt .mono{color:var(--muted);}
+  .banner{margin-top:18px;padding:12px 15px;border:1px solid var(--line);border-left:3px solid var(--warn);
+    border-radius:0 12px 12px 0;background:var(--card);font-size:14px;}
+  footer{margin-top:28px;color:var(--muted);font-size:12.5px;font-family:var(--mono);}
+  b{font-weight:650;}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">S1 · Bench hookup</div>
+    <h1>Wiring — IVY MD0630 leakage sensor → PC</h1>
+    <div class="sub">Talk PC ↔ sensor with <b>CT.exe</b> + <b>Serial Monitor</b>, then sniff the Modbus frames to derive the register map. Use the <b>7-pin header</b> (VCC / GND / TX / RX). Path shown: <b>USB-TTL at 5 V</b>.</div>
+  </header>
+
+  <div class="card">
+    <div class="diagram-wrap">
+      <svg class="diagram" viewBox="0 0 900 500" role="img"
+           aria-label="Wiring diagram: 12V bench supply and a 5V USB-TTL adapter connected to the MD0630 sensor 7-pin header, TX/RX crossed, common ground.">
+        <!-- ===== MODULE ===== -->
+        <rect class="blk" x="40" y="70" width="210" height="392" rx="14"/>
+        <text class="blk-title" x="145" y="104" text-anchor="middle" font-size="16">MD0630T41A</text>
+        <text class="blk-sub" x="145" y="123" text-anchor="middle" font-size="12">IVY sensor · 7-pin header</text>
+        <line class="divln" x1="56" y1="136" x2="234" y2="136"/>
+        <text class="pinlbl" x="232" y="180" text-anchor="end">VCC</text>
+        <circle cx="250" cy="175" r="5.5" fill="var(--w-vcc)"/>
+        <text class="pinlbl" x="232" y="220" text-anchor="end">GND</text>
+        <circle cx="250" cy="215" r="5.5" fill="var(--w-gnd)"/>
+        <text class="pinlbl" x="232" y="260" text-anchor="end">TX</text>
+        <circle cx="250" cy="255" r="5.5" fill="var(--w-tx)"/>
+        <text class="pinlbl" x="232" y="300" text-anchor="end">RX</text>
+        <circle cx="250" cy="295" r="5.5" fill="var(--w-rx)"/>
+        <line class="divln" x1="56" y1="326" x2="234" y2="326" stroke-dasharray="3 4"/>
+        <text class="pinlbl mut" x="232" y="363" text-anchor="end">DA</text>
+        <circle cx="250" cy="358" r="5" fill="var(--muted)"/>
+        <text class="pinlbl mut" x="232" y="396" text-anchor="end">AO</text>
+        <circle cx="250" cy="391" r="5" fill="var(--muted)"/>
+        <text class="pinlbl mut" x="232" y="429" text-anchor="end">DO</text>
+        <circle cx="250" cy="424" r="5" fill="var(--muted)"/>
+        <text class="tag" x="145" y="452" text-anchor="middle">5 V alarm outputs — wire later</text>
+
+        <!-- ===== PSU ===== -->
+        <rect class="blk" x="560" y="88" width="196" height="104" rx="12"/>
+        <text class="blk-title" x="658" y="120" text-anchor="middle" font-size="15">Bench PSU</text>
+        <text class="blk-sub" x="658" y="139" text-anchor="middle" font-size="12">12 V · limit 30–100 mA</text>
+        <circle cx="560" cy="152" r="5.5" fill="var(--w-vcc)"/>
+        <text class="pinlbl" x="576" y="157">+12 V</text>
+        <circle cx="560" cy="178" r="5.5" fill="var(--w-gnd)"/>
+        <text class="pinlbl" x="576" y="183">GND (−)</text>
+
+        <!-- ===== ADAPTER ===== -->
+        <rect class="blk" x="560" y="250" width="204" height="200" rx="12"/>
+        <text class="blk-title" x="662" y="282" text-anchor="middle" font-size="15">USB-TTL adapter</text>
+        <text class="blk-sub" x="662" y="301" text-anchor="middle" font-size="12">set jumper to 5 V</text>
+        <circle cx="560" cy="332" r="5.5" fill="var(--w-pu)"/>
+        <text class="pinlbl" x="576" y="337">5V</text>
+        <circle cx="560" cy="368" r="5.5" fill="var(--w-rx)"/>
+        <text class="pinlbl" x="576" y="373">TXD</text>
+        <circle cx="560" cy="404" r="5.5" fill="var(--w-tx)"/>
+        <text class="pinlbl" x="576" y="409">RXD</text>
+        <circle cx="560" cy="438" r="5.5" fill="var(--w-gnd)"/>
+        <text class="pinlbl" x="576" y="443">GND</text>
+
+        <!-- ===== PC ===== -->
+        <rect class="blk" x="806" y="330" width="78" height="86" rx="10"/>
+        <text class="blk-title" x="845" y="368" text-anchor="middle" font-size="14">PC</text>
+        <text class="blk-sub" x="845" y="386" text-anchor="middle" font-size="10">CT.exe</text>
+        <line class="wire" x1="764" y1="368" x2="806" y2="368" stroke="var(--usb)"/>
+        <text class="tag" x="785" y="358" text-anchor="middle">USB</text>
+
+        <!-- ===== WIRES ===== -->
+        <path class="wire" d="M250,175 C 400,175 430,152 560,152" stroke="var(--w-vcc)"/>
+        <path class="wire" d="M250,215 C 400,215 430,178 560,178" stroke="var(--w-gnd)"/>
+        <path class="wire" d="M250,215 C 356,215 356,438 560,438" stroke="var(--w-gnd)"/>
+        <path class="wire" d="M250,255 C 405,255 410,404 560,404" stroke="var(--w-tx)"/>
+        <path class="wire" d="M250,295 C 398,295 418,368 560,368" stroke="var(--w-rx)"/>
+        <text class="tag" x="452" y="330" text-anchor="middle" fill="var(--warn)">✕ crossed</text>
+        <text class="tag" x="352" y="330" text-anchor="middle">common GND</text>
+      </svg>
+    </div>
+
+    <div class="legend" aria-hidden="true">
+      <span><span class="dot" style="background:var(--w-vcc)"></span>VCC / 12 V</span>
+      <span><span class="dot" style="background:var(--w-gnd)"></span>GND (common)</span>
+      <span><span class="dot" style="background:var(--w-tx)"></span>TX → RXD</span>
+      <span><span class="dot" style="background:var(--w-rx)"></span>RX → TXD</span>
+      <span><span class="dot" style="background:var(--w-pu)"></span>5 V / pull-ups</span>
+    </div>
+
+    <div class="pull">
+      <div class="row"><b>Pull-ups (datasheet requirement, UART is 5 V):</b></div>
+      <div class="row">TX&nbsp;<span class="res">──[ 4.7&nbsp;kΩ ]──</span>&nbsp;5&nbsp;V&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;RX&nbsp;<span class="res">──[ 4.7&nbsp;kΩ ]──</span>&nbsp;5&nbsp;V</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Connection table</h2>
+      <table>
+        <thead><tr><th>From (MD0630)</th><th>To</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-vcc)"></span>VCC</td><td>PSU <b>+12 V</b></td><td>power</td></tr>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-gnd)"></span>GND</td><td>PSU <b>(−)</b> &amp; adapter <b>GND</b></td><td><b>common ground</b></td></tr>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-tx)"></span>TX</td><td>adapter <b>RXD</b></td><td>crossed</td></tr>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-rx)"></span>RX</td><td>adapter <b>TXD</b></td><td>crossed</td></tr>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-pu)"></span>TX</td><td>4.7 kΩ → <b>5 V</b></td><td>pull-up</td></tr>
+          <tr><td class="pin"><span class="dot" style="background:var(--w-pu)"></span>RX</td><td>4.7 kΩ → <b>5 V</b></td><td>pull-up</td></tr>
+          <tr><td class="pin mono" style="color:var(--muted)">DO AO DA</td><td class="mono" style="color:var(--muted)">— (open)</td><td>not used in S1</td></tr>
+          <tr><td class="pin">adapter</td><td><b>PC</b> USB</td><td>→ COM port</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Don't miss these</h2>
+      <ul class="rules">
+        <li><span class="ic" style="background:var(--warn)">!</span><div><b>Common ground.</b> PSU (−), module GND and adapter GND must all be tied together — else nothing works.</div></li>
+        <li><span class="ic" style="background:var(--w-tx)">⇄</span><div><b>TX/RX crossed.</b> Module <span class="mono">TX → RXD</span>, module <span class="mono">RX → TXD</span>.</div></li>
+        <li><span class="ic" style="background:var(--w-pu)">Ω</span><div><b>UART is 5 V.</b> Set the adapter jumper to <span class="mono">5 V</span>; pull-ups 4.7 kΩ from TX and RX to <span class="mono">5 V</span>.</div></li>
+        <li><span class="ic" style="background:var(--w-vcc)">⚡</span><div><b>12 V on VCC only.</b> Leave <span class="mono">DO / AO / DA</span> open — those are 5 V alarm outputs (for later; the ESP32 will need a <b>5 V→3.3 V</b> level-shifter).</div></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="banner">
+    <b>Use the 7-pin header, not the 6-wire cable.</b> Only the 7-pin SIP header exposes <span class="mono">TX / RX</span> (Modbus). The 6 colored wires (red/blue/yellow/green/white+black) carry power + alarm outputs only — <b>no Modbus</b>.
+  </div>
+
+  <div class="alt">
+    <b>Alternative — USB-RS485 path</b> (uses the RS485↔TTL module you already have):<br>
+    <span class="mono">Bench 12 V → MD0630 (VCC/GND) · MD0630 TX/RX/GND → RS485-TTL module (5 V, TXD/RXD/GND) → A+/B− → USB-RS485 adapter → PC</span>.
+    Same rules: common GND, TX/RX crossed into the RS485-TTL module. RS485 is differential, so it also solves the 5 V↔3.3 V level issue for the ESP32 later.
+  </div>
+
+  <footer>NESL EMS · S1 leakage bring-up · MD0630T41A · 7-pin header (silkscreen order: DO · AO · DA · TX · RX · GND · VCC) · UART = 5 V · use only VCC / GND / TX / RX for the Modbus sniff.</footer>
+</div>

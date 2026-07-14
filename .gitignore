@@ -76,3 +76,12 @@ compile_commands.json
 *.kilo
 *.bak
 *.tmp
+
+# Accidental nested clone of this repo (do not commit)
+/meshems-openami-metering/
+
+# Vendor documents from IVY (large — kept local only)
+IVY METERING*/
+
+# Scratch / experiments
+test_oled/
