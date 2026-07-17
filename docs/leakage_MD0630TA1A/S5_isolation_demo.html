@@ -323,13 +323,19 @@
     $('vtitle').textContent = ok
       ? `Nominated → ${verdict.nominated}`
       : 'Refused to isolate — fault likely between cabinets';
-    const r = verdict.ranked;
+    // The decision (nominated + action) is frozen at settling time, but the
+    // displayed magnitudes and confidence track the CURRENT levels so the card
+    // stays consistent with the bars above.
+    const nom    = c.ranked.find(e => e.id === verdict.nominated) || c.ranked[0];
+    const runner = c.ranked.find(e => e.id !== verdict.nominated) || c.ranked[1];
+    let dispConf = nom.ac > 0.2 ? Math.max(0, Math.min(1, (nom.ac - runner.ac) / nom.ac)) : 0;
+    if (exporting) dispConf *= 0.75;
     $('vbody').innerHTML = ok
-      ? `Rank 1 <b>${r[0].id}</b> ${f1(r[0].ac)} mA vs rank 2 ${r[1].id} ${f1(r[1].ac)} mA → confidence
-         <span class="conf">${verdict.conf.toFixed(2)}</span> ≥ ${CONF_MIN} · quorum 3/3 → it isolates its takeoff;
+      ? `Rank 1 <b>${nom.id}</b> ${f1(nom.ac)} mA vs rank 2 ${runner.id} ${f1(runner.ac)} mA → confidence
+         <span class="conf">${dispConf.toFixed(2)}</span> ≥ ${CONF_MIN} · quorum 3/3 → it isolates its takeoff;
          peers hold. Ops alerted.${exporting?' <b>Reverse flow present → confidence de-rated.</b>':''}`
-      : `Rank 1 ${r[0].id} ${f1(r[0].ac)} mA and rank 2 ${r[1].id} ${f1(r[1].ac)} mA are too close →
-         confidence <span class="conf">${verdict.conf.toFixed(2)}</span> &lt; ${CONF_MIN}. The mesh
+      : `Rank 1 ${nom.id} ${f1(nom.ac)} mA and rank 2 ${runner.id} ${f1(runner.ac)} mA are too close →
+         confidence <span class="conf">${dispConf.toFixed(2)}</span> &lt; ${CONF_MIN}. The mesh
          <b>does not auto-isolate</b> — it raises an ops alert naming both candidates. This is the safety
          gate.${exporting?' <b>Reverse flow present → confidence de-rated.</b>':''}`;
   }
