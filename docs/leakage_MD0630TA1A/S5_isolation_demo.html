@@ -1,0 +1,395 @@
+<title>Leakage Isolation — decentralised FLISR over MQTT</title>
+<style>
+  :root {
+    --bg:#eceff0; --surface:#ffffff; --surface-2:#f4f7f7; --border:#d2dcde;
+    --ink:#14242b; --muted:#5b6d74; --accent:#bf6a12; --accent-soft:#f3e2cf;
+    --ok:#1f8a4c; --warn:#c07a08; --crit:#cf2f36; --idle:#8a9aa1;
+    --e1:#2f7fd6; --e2:#7a52c9; --e3:#0f9c8f;
+    --shadow:0 1px 2px rgba(20,36,43,.06), 0 8px 24px rgba(20,36,43,.06);
+    --sans:system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0b1214; --surface:#121e22; --surface-2:#0f191c; --border:#25363c;
+      --ink:#e7eff1; --muted:#93a6ad; --accent:#e6a24a; --accent-soft:#2a2013;
+      --ok:#3fbd74; --warn:#e0a52f; --crit:#f0565c; --idle:#6d818a;
+      --e1:#5aa6ec; --e2:#a084ea; --e3:#2fc4b4;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#eceff0; --surface:#ffffff; --surface-2:#f4f7f7; --border:#d2dcde;
+    --ink:#14242b; --muted:#5b6d74; --accent:#bf6a12; --accent-soft:#f3e2cf;
+    --ok:#1f8a4c; --warn:#c07a08; --crit:#cf2f36; --idle:#8a9aa1;
+    --e1:#2f7fd6; --e2:#7a52c9; --e3:#0f9c8f;
+    --shadow:0 1px 2px rgba(20,36,43,.06), 0 8px 24px rgba(20,36,43,.06);
+  }
+  :root[data-theme="dark"] {
+    --bg:#0b1214; --surface:#121e22; --surface-2:#0f191c; --border:#25363c;
+    --ink:#e7eff1; --muted:#93a6ad; --accent:#e6a24a; --accent-soft:#2a2013;
+    --ok:#3fbd74; --warn:#e0a52f; --crit:#f0565c; --idle:#6d818a;
+    --e1:#5aa6ec; --e2:#a084ea; --e3:#2fc4b4;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+         line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1040px; margin:0 auto; padding:36px 20px 64px;
+          display:flex; flex-direction:column; gap:20px; }
+
+  .eyebrow { font-family:var(--mono); font-size:11.5px; letter-spacing:.14em;
+          text-transform:uppercase; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:clamp(23px,3.6vw,32px); line-height:1.15; margin:0 0 6px;
+          text-wrap:balance; letter-spacing:-.01em; }
+  .sub { margin:0; color:var(--muted); max-width:70ch; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px;
+          box-shadow:var(--shadow); }
+  .card-title { font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+          text-transform:uppercase; color:var(--accent); padding:14px 18px 0; margin:0; }
+
+  /* controls */
+  .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; padding:14px 18px 18px; }
+  .ctl { display:flex; flex-direction:column; gap:6px; }
+  .ctl label { font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+          text-transform:uppercase; color:var(--muted); }
+  input[type=range]{ width:260px; accent-color:var(--accent); cursor:pointer; }
+  button { font-family:var(--sans); font-size:14px; font-weight:600; padding:9px 16px;
+          border-radius:9px; border:1px solid var(--border); background:var(--surface-2);
+          color:var(--ink); cursor:pointer; transition:transform .06s ease, background .15s ease; }
+  button:hover { background:var(--accent-soft); }
+  button:active { transform:translateY(1px); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { filter:brightness(1.08); }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .switch { display:inline-flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); cursor:pointer; }
+
+  /* feeder */
+  .scroll { overflow-x:auto; padding:6px 18px 4px; }
+  svg.feeder { display:block; width:100%; min-width:640px; height:auto; }
+
+  /* bars */
+  .bars { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; padding:6px 18px 18px; }
+  @media (max-width:700px){ .bars { grid-template-columns:1fr; } }
+  .bar { border:1px solid var(--border); border-radius:11px; padding:12px; background:var(--surface-2); }
+  .bar .top { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+  .bar .nm { font-family:var(--mono); font-size:12px; font-weight:700; }
+  .bar .val { font-family:var(--mono); font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .bar .unit { font-size:11px; color:var(--muted); font-weight:500; }
+  .track { position:relative; height:9px; border-radius:5px; background:color-mix(in srgb, var(--ink) 10%, transparent); overflow:hidden; }
+  .fill { height:100%; border-radius:5px; width:0%; transition:width .18s linear; }
+  .tick { position:absolute; top:-3px; width:2px; height:15px; border-radius:1px; }
+  .tick.watch { background:var(--warn); }
+  .tick.trip  { background:var(--crit); }
+  .legendrow { display:flex; justify-content:space-between; margin-top:7px;
+          font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+
+  .pill { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.08em;
+          text-transform:uppercase; padding:3px 8px; border-radius:99px; white-space:nowrap; }
+  .p-normal { background:color-mix(in srgb, var(--idle) 20%, transparent); color:var(--idle); }
+  .p-watch  { background:color-mix(in srgb, var(--warn) 20%, transparent); color:var(--warn); }
+  .p-isolating { background:color-mix(in srgb, var(--accent) 22%, transparent); color:var(--accent); }
+  .p-fault  { background:color-mix(in srgb, var(--crit) 20%, transparent); color:var(--crit); }
+  .p-nom    { background:var(--crit); color:#fff; }
+
+  /* verdict */
+  .verdict { padding:16px 18px 18px; display:flex; flex-direction:column; gap:8px; }
+  .vhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .vtitle { font-size:16px; font-weight:700; margin:0; }
+  .vmeta { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .vbody { font-size:13.5px; color:var(--muted); margin:0; }
+  .conf { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* log */
+  .log { padding:6px 18px 18px; }
+  pre.logbox { margin:0; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+          padding:12px; font-family:var(--mono); font-size:11.5px; line-height:1.7;
+          max-height:210px; overflow:auto; color:var(--ink); }
+  .lg-t { color:var(--muted); }
+  .lg-iso { color:var(--accent); font-weight:700; }
+  .lg-alert { color:var(--crit); font-weight:700; }
+
+  .note { padding:14px 18px 18px; font-size:13px; color:var(--muted); }
+  .note b { color:var(--ink); }
+  footer { color:var(--muted); font-size:12px; font-family:var(--mono); text-align:center; }
+
+  @media (prefers-reduced-motion:reduce){ .fill { transition:none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">S5 · Design review · IVY MD0630 · LV feeder</p>
+    <h1>Leakage isolation — decentralised FLISR over MQTT</h1>
+    <p class="sub">Three EMS on one shared LV feeder. Place a fault, inject a leak, and watch the mesh
+      localise it — <strong>no master</strong>: every node applies the same deterministic rule and reaches
+      the same nomination. Try putting the fault <em>between</em> two cabinets to see it
+      <strong>refuse to isolate</strong>.</p>
+  </header>
+
+  <div class="card">
+    <p class="card-title">Controls</p>
+    <div class="controls">
+      <div class="ctl">
+        <label for="fpos">Fault position on feeder — <span id="fposv" class="conf">82</span></label>
+        <input type="range" id="fpos" min="5" max="98" value="82" />
+      </div>
+      <div class="ctl">
+        <label for="exp">Grid condition</label>
+        <label class="switch"><input type="checkbox" id="exp" /> street-ems-04 exporting (reverse flow)</label>
+      </div>
+      <button id="go" class="primary">Inject leak</button>
+      <button id="clr">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">LV feeder — residual current seen at each takeoff</p>
+    <div class="scroll">
+      <svg class="feeder" viewBox="0 0 900 220" role="img" aria-label="LV feeder with transformer and three EMS cabinets; a fault marker injects leakage.">
+        <!-- feeder line -->
+        <line x1="90" y1="120" x2="860" y2="120" stroke="var(--border)" stroke-width="7" stroke-linecap="round"/>
+        <line id="energised" x1="90" y1="120" x2="860" y2="120" stroke="var(--ok)" stroke-width="3" stroke-linecap="round"/>
+        <!-- earth -->
+        <line x1="90" y1="185" x2="860" y2="185" stroke="var(--border)" stroke-width="2" stroke-dasharray="3 5"/>
+        <text x="866" y="189" fill="var(--muted)" font-family="var(--mono)" font-size="10">earth</text>
+        <!-- transformer -->
+        <rect x="24" y="94" width="66" height="52" rx="7" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="57" y="117" fill="var(--ink)" font-family="var(--mono)" font-size="10.5" font-weight="700" text-anchor="middle">TX</text>
+        <text x="57" y="132" fill="var(--muted)" font-family="var(--mono)" font-size="9" text-anchor="middle">LV source</text>
+        <!-- fault current arrows + fault marker + cabinets injected here -->
+        <g id="dyn"></g>
+      </svg>
+    </div>
+    <div class="bars" id="bars"></div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">Isolation round — deterministic nomination</p>
+    <div class="verdict">
+      <div class="vhead">
+        <p class="vtitle" id="vtitle">Idle — no leakage</p>
+        <span class="pill p-normal" id="vpill">normal</span>
+        <span class="vmeta" id="vmeta">watch ≥ 15 mA · trip ≥ 30 mA · isolate only if confidence ≥ 0.30</span>
+      </div>
+      <p class="vbody" id="vbody">Press <strong>Inject leak</strong> to open a round.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">MQTT — lvfeeder/lv-12/leakage/…</p>
+    <div class="log"><pre class="logbox" id="log">waiting…</pre></div>
+  </div>
+
+  <div class="card">
+    <p class="note">
+      <b>What this demonstrates.</b> EMS upstream of the fault carry the residual current and see it;
+      those downstream see almost nothing — so the <b>boundary brackets the fault</b>, and the highest
+      magnitude marks the electrically closest node. The round triggers on <b>change</b> (ramp + correlated
+      onset), not on absolute level, because standing residual current exists even without a fault.
+      When two nodes read nearly the same level the fault sits <b>between</b> them: confidence collapses and
+      the mesh <b>alerts instead of isolating</b>. Under <b>reverse power flow</b> the exporting node lowers its
+      own AC threshold to 27 mA and confidence is de-rated — the case that <b>phase-angle</b> tracking would resolve.
+      <b>The sub-300 ms life-safety trip is never done here</b> — it stays on the module's hardware fault line.
+    </p>
+  </div>
+
+  <footer>Simulation for design review — model is illustrative, not a validated field model.</footer>
+</div>
+
+<script>
+(function(){
+  const EMS = [
+    { id:'street-ems-01', pos:25, cvar:'--e1' },
+    { id:'street-ems-04', pos:55, cvar:'--e2' },
+    { id:'street-ems-07', pos:85, cvar:'--e3' }
+  ];
+  const WATCH=15, TRIP=30, TRIP_EXPORT=27, LAMBDA=30, RATE=4.2, PEAK=54, SETTLE=2.0, CONF_MIN=0.30;
+  const X0=90, X1=860, BAR_MAX=50;
+
+  let faultPos=82, t=0, src=0, running=false, exporting=false;
+  let roundOpen=false, onsetT=null, verdict=null, lastLog=0, seq=0;
+  const logLines=[];
+
+  const $ = id => document.getElementById(id);
+  const px = p => X0 + (X1-X0)*(p/100);
+  const tripOf = e => (exporting && e.id==='street-ems-04') ? TRIP_EXPORT : TRIP;
+
+  // share of the source residual seen by an EMS: upstream carries it, downstream barely
+  function shareOf(pos){
+    const d = faultPos - pos;
+    if (d >= 0) return Math.exp(-d/LAMBDA);
+    return 0.10*Math.exp(-(-d)/LAMBDA);
+  }
+
+  function levels(){
+    return EMS.map(e => {
+      let v = src * shareOf(e.pos);
+      if (exporting && e.id==='street-ems-04') v *= 0.82; // reverse flow perturbs the return path
+      return { ...e, ac: v, trip: tripOf(e) };
+    });
+  }
+  function stateOf(v, e){
+    if (!running && v.ac < 0.05) return 'normal';
+    if (v.ac >= v.trip) return 'fault';
+    if (roundOpen) return 'isolating';
+    if (v.ac >= WATCH) return 'watch';
+    return 'normal';
+  }
+
+  function compute(){
+    const L = levels().slice().sort((a,b)=> b.ac - a.ac || (a.id<b.id?-1:1));
+    const v1 = L[0].ac, v2 = L[1] ? L[1].ac : 0;
+    const conf = v1 > 0.2 ? Math.max(0, Math.min(1,(v1-v2)/v1)) : 0;
+    return { ranked:L, conf };
+  }
+
+  function log(line, cls){
+    logLines.push({line, cls});
+    if (logLines.length > 60) logLines.shift();
+    $('log').innerHTML = logLines.map(l =>
+      `<span class="${l.cls||'lg-t'}">${l.line}</span>`).join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+  const f1 = n => n.toFixed(1);
+
+  // ---------- render ----------
+  function drawFeeder(L){
+    const g = $('dyn'); let s='';
+    // fault current path (upstream segment glows)
+    const fx = px(faultPos);
+    if (src > 0.5) {
+      s += `<line x1="${X0}" y1="120" x2="${fx}" y2="120" stroke="var(--crit)" stroke-width="5" stroke-linecap="round" opacity="0.5"/>`;
+      s += `<line x1="${fx}" y1="120" x2="${fx}" y2="185" stroke="var(--crit)" stroke-width="2.5" stroke-dasharray="4 4"/>`;
+      s += `<text x="${fx+8}" y="160" fill="var(--crit)" font-family="var(--mono)" font-size="10" font-weight="700">${f1(src)} mA → earth</text>`;
+    }
+    // fault marker
+    s += `<circle cx="${fx}" cy="120" r="${src>0.5?8:5}" fill="var(--crit)" opacity="${src>0.5?1:0.45}"/>`;
+    s += `<text x="${fx}" y="102" fill="var(--crit)" font-family="var(--mono)" font-size="10" font-weight="700" text-anchor="middle">fault</text>`;
+    // cabinets
+    L.forEach(e=>{
+      const x = px(e.pos), st = stateOf(e,e);
+      const nom = verdict && verdict.nominated === e.id;
+      const col = nom ? 'var(--crit)' : `var(${e.cvar})`;
+      s += `<line x1="${x}" y1="120" x2="${x}" y2="52" stroke="${col}" stroke-width="2"/>`;
+      s += `<rect x="${x-46}" y="14" width="92" height="40" rx="7" fill="var(--surface-2)" stroke="${col}" stroke-width="${nom?2.5:1.5}"/>`;
+      s += `<text x="${x}" y="30" fill="var(--ink)" font-family="var(--mono)" font-size="9.5" font-weight="700" text-anchor="middle">${e.id.replace('street-','')}</text>`;
+      s += `<text x="${x}" y="45" fill="${col}" font-family="var(--mono)" font-size="12" font-weight="700" text-anchor="middle">${f1(e.ac)} mA</text>`;
+      s += `<circle cx="${x}" cy="120" r="4.5" fill="${col}"/>`;
+      if (nom) s += `<text x="${x}" y="68" fill="var(--crit)" font-family="var(--mono)" font-size="9" font-weight="700" text-anchor="middle">NOMINATED</text>`;
+    });
+    g.innerHTML = s;
+  }
+
+  function drawBars(L){
+    $('bars').innerHTML = L.map(e=>{
+      const st = stateOf(e,e);
+      const nom = verdict && verdict.nominated===e.id;
+      const pct = Math.min(100, e.ac/BAR_MAX*100);
+      const col = e.ac>=e.trip ? 'var(--crit)' : e.ac>=WATCH ? 'var(--warn)' : `var(${e.cvar})`;
+      return `<div class="bar">
+        <div class="top">
+          <span class="nm" style="color:var(${e.cvar})">${e.id}</span>
+          <span class="pill ${nom?'p-nom':'p-'+st}">${nom?'nominated':st}</span>
+        </div>
+        <div><span class="val" style="color:${col}">${f1(e.ac)}</span> <span class="unit">mA AC</span></div>
+        <div class="track" style="margin-top:8px">
+          <div class="fill" style="width:${pct}%;background:${col}"></div>
+          <div class="tick watch" style="left:${WATCH/BAR_MAX*100}%"></div>
+          <div class="tick trip" style="left:${e.trip/BAR_MAX*100}%"></div>
+        </div>
+        <div class="legendrow"><span>0</span><span>watch 15</span><span>trip ${e.trip}</span><span>${BAR_MAX}</span></div>
+      </div>`;
+    }).join('');
+  }
+
+  function drawVerdict(c){
+    if (!roundOpen && src < 0.5){
+      $('vtitle').textContent = 'Idle — no leakage';
+      $('vpill').className='pill p-normal'; $('vpill').textContent='normal';
+      $('vbody').innerHTML = 'Press <strong>Inject leak</strong> to open a round.';
+      return;
+    }
+    if (!verdict){
+      $('vtitle').textContent = 'Round open — collecting telemetry';
+      $('vpill').className='pill p-isolating'; $('vpill').textContent='isolating';
+      $('vbody').innerHTML = `Settling window ${SETTLE.toFixed(1)} s · ranking peers on phase L2 with correlated onset…`;
+      return;
+    }
+    const ok = verdict.action==='isolate_takeoff';
+    $('vpill').className = 'pill ' + (ok?'p-fault':'p-watch');
+    $('vpill').textContent = ok ? 'isolated' : 'alert only';
+    $('vtitle').textContent = ok
+      ? `Nominated → ${verdict.nominated}`
+      : 'Refused to isolate — fault likely between cabinets';
+    const r = verdict.ranked;
+    $('vbody').innerHTML = ok
+      ? `Rank 1 <b>${r[0].id}</b> ${f1(r[0].ac)} mA vs rank 2 ${r[1].id} ${f1(r[1].ac)} mA → confidence
+         <span class="conf">${verdict.conf.toFixed(2)}</span> ≥ ${CONF_MIN} · quorum 3/3 → it isolates its takeoff;
+         peers hold. Ops alerted.${exporting?' <b>Reverse flow present → confidence de-rated.</b>':''}`
+      : `Rank 1 ${r[0].id} ${f1(r[0].ac)} mA and rank 2 ${r[1].id} ${f1(r[1].ac)} mA are too close →
+         confidence <span class="conf">${verdict.conf.toFixed(2)}</span> &lt; ${CONF_MIN}. The mesh
+         <b>does not auto-isolate</b> — it raises an ops alert naming both candidates. This is the safety
+         gate.${exporting?' <b>Reverse flow present → confidence de-rated.</b>':''}`;
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function tick(now){
+    const dt = Math.min(0.05,(now-last)/1000); last = now;
+    if (running){
+      t += dt;
+      src = Math.min(PEAK, src + RATE*dt);
+      const L = levels();
+      const anyWatch = L.some(e=> e.ac >= WATCH);
+      if (anyWatch && !roundOpen){
+        roundOpen = true; onsetT = t;
+        log(`[${t.toFixed(1)}s] ROUND OPEN  round_id=lv-12:${Math.floor(Date.now()/1000)}:L2  trigger=ramp+onset`, 'lg-iso');
+      }
+      if (roundOpen && !verdict && (t-onsetT) >= SETTLE){
+        const c = compute();
+        let conf = c.conf;
+        if (exporting) conf *= 0.75;           // de-rate under reverse flow
+        const action = conf >= CONF_MIN ? 'isolate_takeoff' : 'alert_only';
+        verdict = { nominated:c.ranked[0].id, ranked:c.ranked, conf, action };
+        log(`[${t.toFixed(1)}s] isolation → nominated=${verdict.nominated} rule=max_ac_mA__correlated_onset conf=${conf.toFixed(2)} action=${action}`, 'lg-iso');
+        log(`[${t.toFixed(1)}s] alert → located_at=${verdict.nominated}/L2 severity=${action==='isolate_takeoff'?'critical':'warning'} classification=leakage`, 'lg-alert');
+      }
+      if (t - lastLog >= 1.0){
+        lastLog = t; seq++;
+        levels().forEach(e=>{
+          log(`[${t.toFixed(1)}s] telemetry/${e.id} {ac_mA:${f1(e.ac)}, ramp:${f1(RATE*shareOf(e.pos))}, state:"${stateOf(e,e)}", seq:${seq}}`);
+        });
+      }
+    }
+    const L = levels();
+    drawFeeder(L); drawBars(L); drawVerdict(compute());
+    // de-energise the isolated section
+    const en = $('energised');
+    if (verdict && verdict.action==='isolate_takeoff'){
+      const nx = px(EMS.find(e=>e.id===verdict.nominated).pos);
+      en.setAttribute('x2', nx); en.setAttribute('stroke','var(--ok)');
+    } else { en.setAttribute('x2', X1); }
+    requestAnimationFrame(tick);
+  }
+
+  function reset(){
+    running=false; t=0; src=0; roundOpen=false; onsetT=null; verdict=null; lastLog=0; seq=0;
+    logLines.length=0; $('log').textContent='waiting…';
+  }
+
+  $('fpos').addEventListener('input', e=>{
+    faultPos = +e.target.value; $('fposv').textContent = e.target.value;
+    if (running || src>0) reset();
+  });
+  $('exp').addEventListener('change', e=>{ exporting = e.target.checked; reset(); });
+  $('go').addEventListener('click', ()=>{
+    reset(); running=true;
+    log(`[0.0s] leak injected at feeder position ${faultPos} — source ramping ${RATE} mA/s`, 'lg-alert');
+  });
+  $('clr').addEventListener('click', reset);
+
+  requestAnimationFrame(tick);
+})();
+</script>
