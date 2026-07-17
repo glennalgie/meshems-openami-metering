@@ -616,7 +616,12 @@ void mqtt_publish_Harmonics(long timestamp) {
 }
 
 void mqtt_publish_Leakage(String meterId, const PowerData& meterData) {
-  LeakageModel leakageData;
+#if defined(ENABLE_MODBUS_MASTER) && defined(ENABLE_LEAKAGE_MD0630)
+  // Live AC/DC residual current from the MD0630 (or the mock ramp when LEAKAGE_MOCK).
+  const LeakageModel& leakageData = get_leakage_model();
+#else
+  LeakageModel leakageData;   // no leakage sensor configured — publishes defaults
+#endif
 
   // TODO prepare actionable DC and AC leakage measurments, patterns and stats, and faults, and outages
   // TODO add adaptive publish rate as leakage grows from none to 

@@ -22,4 +22,14 @@ float    get_sht20_temperature();    // degrees Celsius
 float    get_sht20_humidity();       // relative humidity, percent (0–100)
 uint16_t get_sht20_success_count();  // cumulative successful poll count (0 = no valid data yet)
 
+#if defined(ENABLE_LEAKAGE_MD0630)
+#include <metering/leakage_model_ivy41a.h>
+
+// IVY MD0630 leakage (AC + DC residual current) accessors.
+// The model is filled by poll_leakage() from the real module, or from the mock
+// ramp when LEAKAGE_MOCK is set, and is published on subpanel_RCMleaks.
+void          poll_leakage();
+LeakageModel& get_leakage_model();
+#endif
+
 

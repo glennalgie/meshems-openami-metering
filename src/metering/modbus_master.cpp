@@ -49,6 +49,12 @@
 // stack and can trip a stack canary during boot.
 #include <metering/modbus_sht20.h>
 
+#if defined(ENABLE_LEAKAGE_MD0630)
+    // IVY MD0630 Type-B AC+DC residual-current monitor — shares the RS-485 bus.
+    #include <metering/modbus_md0630.h>
+    #include <metering/leakage_model_ivy41a.h>
+#endif
+
 #if defined(METER_TYPE_ATM90E32)
     #include <metering/meter_atm90e32.h>
 #elif defined(METER_TYPE_DDS238)
@@ -69,6 +75,10 @@
 
 #define THERMOSTAT_1_ADDR 0x01
 
+// IVY MD0630 leakage CT node. Glenn's numbering: 100 single-phase, or 100/101/102
+// with one CT per phase. Must not clash with the SHT20 (1) or the meters (1-3).
+#define MD0630_ADDR 100
+
 // Modbus node addresses.  Standard factory default for DDS238, CHD130, and
 // DDSU666 meters is 0x01/0x02/0x03.  Reprogramme each meter via its front
 // panel or configuration tool before installation if a different address is
@@ -82,6 +92,11 @@
 // --------------------------------------------------------------------------
 HardwareSerial _modbus1(1);                       // HW519 RS-485 transceiver
 Modbus_SHT20   sht20;                             // temperature/humidity sensor
+
+#if defined(ENABLE_LEAKAGE_MD0630)
+Modbus_MD0630  md0630;                            // AC+DC residual-current monitor
+LeakageModel   leakageModel;                      // published on subpanel_RCMleaks
+#endif
 
 // Modbus energy meter objects — only for RTU meter types.
 #if defined(METER_TYPE_DDS238)
@@ -117,6 +132,28 @@ static void setup_sht20() {
     sht20.set_modbus_address(THERMOSTAT_1_ADDR);
     sht20.begin(THERMOSTAT_1_ADDR, _modbus1);
 }
+
+#if defined(ENABLE_LEAKAGE_MD0630)
+// --------------------------------------------------------------------------
+// IVY MD0630 leakage CT setup
+// --------------------------------------------------------------------------
+// Seeds the life-safety thresholds into the model (AC 30 mA, DC 6 mA — the model
+// defaults DC to 30 mA, which is wrong for Type B).
+// With LEAKAGE_MOCK the register map is not needed: the driver synthesises a
+// rising leakage so the data model, MQTT and Insights run end to end.
+static void setup_md0630() {
+    Serial.printf("SETUP: MODBUS: MD0630 leakage CT: address:%d\n", MD0630_ADDR);
+    md0630.set_modbus_address(MD0630_ADDR);
+    md0630.begin(MD0630_ADDR, _modbus1);
+    leakageModel.acSinusoidal.threshold_mA = Modbus_MD0630::AC_THRESHOLD_MA;
+    leakageModel.dc.threshold_mA           = Modbus_MD0630::DC_THRESHOLD_MA;
+#if defined(LEAKAGE_MOCK)
+    md0630.setMockRamp(0.0f, 0.5f, 45.0f,    // AC: 0 -> 45 mA at 0.5 mA/s  (crosses 30 mA at ~60 s)
+                       0.0f, 0.1f,  9.0f);   // DC: 0 ->  9 mA at 0.1 mA/s  (crosses  6 mA at ~60 s)
+    Serial.println("SETUP: MODBUS: MD0630 in MOCK RAMP mode — no hardware required");
+#endif
+}
+#endif
 
 // --------------------------------------------------------------------------
 // Per-meter-type setup helpers
@@ -159,6 +196,10 @@ void setup_modbus_clients() {
     // SHT20 is always initialised — it lives on RS-485 independent of the
     // energy meter type.
     setup_sht20();
+
+#if defined(ENABLE_LEAKAGE_MD0630)
+    setup_md0630();
+#endif
 
 #if defined(METER_TYPE_ATM90E32)
     // SPI energy meter: initialise ATM90E32 ICs in addition to SHT20.
@@ -340,6 +381,21 @@ void poll_thermostats() {
     if (result != 0x00) dump_uart_rx();
 }
 
+#if defined(ENABLE_LEAKAGE_MD0630)
+/**
+ * Read AC + DC residual current into the leakage model — from the real module,
+ * or synthesised when LEAKAGE_MOCK is set. The model is what
+ * mqtt_publish_Leakage() serialises onto subpanel_RCMleaks.
+ */
+void poll_leakage() {
+    if (md0630.poll() == ModbusMaster::ku8MBSuccess) {
+        leakageModel.updateAll(md0630.getAcLeakage_mA(), 0.0f, md0630.getDcLeakage_mA());
+    }
+}
+
+LeakageModel& get_leakage_model() { return leakageModel; }
+#endif
+
 // --------------------------------------------------------------------------
 // Main loop
 // --------------------------------------------------------------------------
@@ -353,6 +409,9 @@ void loop_modbus_master() {
     if (millis() - lastPollMillis > ModbusMaster_pollrate) {
         Serial.println("Starting poll cycle...");
         poll_thermostats();   // always poll SHT20 regardless of energy meter type
+#if defined(ENABLE_LEAKAGE_MD0630)
+        poll_leakage();       // AC+DC residual current (real module or mock ramp)
+#endif
         poll_energy_meters();
         lastPollMillis = millis();
     }
