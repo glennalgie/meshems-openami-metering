@@ -142,9 +142,16 @@ static void setup_sht20() {
 // With LEAKAGE_MOCK the register map is not needed: the driver synthesises a
 // rising leakage so the data model, MQTT and Insights run end to end.
 static void setup_md0630() {
-    Serial.printf("SETUP: MODBUS: MD0630 leakage CT: address:%d\n", MD0630_ADDR);
-    md0630.set_modbus_address(MD0630_ADDR);
-    md0630.begin(MD0630_ADDR, _modbus1);
+#if defined(LEAKAGE_PROBE)
+    // Bring-up: talk to the module at its FACTORY DEFAULT address 1 (confirmed
+    // from IVY's PC tool), not the future node 100 (module not reprogrammed yet).
+    const uint8_t addr = 1;
+#else
+    const uint8_t addr = MD0630_ADDR;
+#endif
+    Serial.printf("SETUP: MODBUS: MD0630 leakage CT: address:%d\n", addr);
+    md0630.set_modbus_address(addr);
+    md0630.begin(addr, _modbus1);
     leakageModel.acSinusoidal.threshold_mA = Modbus_MD0630::AC_THRESHOLD_MA;
     leakageModel.dc.threshold_mA           = Modbus_MD0630::DC_THRESHOLD_MA;
 #if defined(LEAKAGE_MOCK)
@@ -388,9 +395,15 @@ void poll_thermostats() {
  * mqtt_publish_Leakage() serialises onto subpanel_RCMleaks.
  */
 void poll_leakage() {
+#if defined(LEAKAGE_PROBE)
+    // Hardware bring-up: safe FC04-then-FC03 reads from 0x0000, print raw words.
+    // No writes. Tells us which function code answers and where the values live.
+    md0630.probeRegisters();
+#else
     if (md0630.poll() == ModbusMaster::ku8MBSuccess) {
         leakageModel.updateAll(md0630.getAcLeakage_mA(), 0.0f, md0630.getDcLeakage_mA());
     }
+#endif
 }
 
 LeakageModel& get_leakage_model() { return leakageModel; }

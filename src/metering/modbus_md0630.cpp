@@ -5,10 +5,7 @@
 // Strategy (Glenn, "path of least blockage"): configurable offsets + function
 // code + a mock mode so the pipeline runs before the register map is confirmed.
 //
-// When validated, move to: src/metering/modbus_md0630.cpp
-// and change the include to: #include <metering/modbus_md0630.h>
-//
-#include "modbus_md0630.h"
+#include <metering/modbus_md0630.h>
 #include <Arduino.h>
 
 static const char* mbErrStr(uint8_t err) {
@@ -26,7 +23,7 @@ static const char* mbErrStr(uint8_t err) {
 }
 
 Modbus_MD0630::Modbus_MD0630() {
-    read_fc                = FC_INPUT;   // configurable; probeRegisters() confirms FC03 vs FC04
+    read_fc                = FC_HOLDING; // confirmed: CT.exe uses FC03 (FC04 also answers)
     mock                   = MOCK_OFF;
     mock_ac = mock_dc      = 0.0f;
     mock_ac_rate = mock_dc_rate = 0.0f;

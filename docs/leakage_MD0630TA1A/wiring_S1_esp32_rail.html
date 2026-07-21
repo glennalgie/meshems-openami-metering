@@ -1,0 +1,238 @@
+<title>Montage final — pull-ups 4.7k sur rail 5 V de l'ESP32</title>
+<style>
+  :root {
+    --bg:#eceff0; --surface:#ffffff; --surface-2:#f4f7f7; --border:#d2dcde;
+    --ink:#14242b; --muted:#5b6d74; --accent:#bf6a12; --accent-soft:#f3e2cf;
+    --w-12v:#8f1d1d; --w-5v:#e11d1d; --w-gnd:#2c3b43; --w-txd:#e07a17; --w-rxd:#c99000;
+    --shadow:0 1px 2px rgba(20,36,43,.06), 0 8px 24px rgba(20,36,43,.06);
+    --sans:system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0b1214; --surface:#121e22; --surface-2:#0f191c; --border:#25363c;
+      --ink:#e7eff1; --muted:#93a6ad; --accent:#e6a24a; --accent-soft:#2a2013;
+      --w-12v:#e06b6b; --w-5v:#ff5a5a; --w-gnd:#8ea1a9; --w-txd:#f0972f; --w-rxd:#e6b92e;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#eceff0; --surface:#ffffff; --surface-2:#f4f7f7; --border:#d2dcde;
+    --ink:#14242b; --muted:#5b6d74; --accent:#bf6a12; --accent-soft:#f3e2cf;
+    --w-12v:#8f1d1d; --w-5v:#e11d1d; --w-gnd:#2c3b43; --w-txd:#e07a17; --w-rxd:#c99000;
+    --shadow:0 1px 2px rgba(20,36,43,.06), 0 8px 24px rgba(20,36,43,.06);
+  }
+  :root[data-theme="dark"] {
+    --bg:#0b1214; --surface:#121e22; --surface-2:#0f191c; --border:#25363c;
+    --ink:#e7eff1; --muted:#93a6ad; --accent:#e6a24a; --accent-soft:#2a2013;
+    --w-12v:#e06b6b; --w-5v:#ff5a5a; --w-gnd:#8ea1a9; --w-txd:#f0972f; --w-rxd:#e6b92e;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans);
+         line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:980px; margin:0 auto; padding:36px 20px 60px;
+          display:flex; flex-direction:column; gap:20px; }
+
+  .eyebrow { font-family:var(--mono); font-size:11.5px; letter-spacing:.14em;
+          text-transform:uppercase; color:var(--accent); margin:0 0 8px; }
+  h1 { font-size:clamp(22px,3.5vw,30px); line-height:1.15; margin:0 0 6px;
+          text-wrap:balance; letter-spacing:-.01em; }
+  .sub { margin:0; color:var(--muted); max-width:66ch; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px;
+          box-shadow:var(--shadow); }
+  .schematic { padding:14px; }
+  .scroll { overflow-x:auto; }
+  svg.diagram { display:block; width:100%; min-width:720px; height:auto; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:12px 20px; padding:12px 18px 4px;
+            font-family:var(--mono); font-size:12.5px; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:7px; }
+  .legend i { width:16px; height:4px; border-radius:2px; display:inline-block; }
+
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:680px){ .grid { grid-template-columns:1fr; } }
+  .step { padding:18px; background:var(--surface); border:1px solid var(--border);
+          border-radius:14px; box-shadow:var(--shadow); }
+  .step .k { font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+          text-transform:uppercase; color:var(--accent); margin:0 0 8px; }
+  .step h3 { margin:0 0 6px; font-size:15.5px; }
+  .step p { margin:0; color:var(--muted); font-size:13.5px; }
+
+  .card-title { font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+          text-transform:uppercase; color:var(--accent); padding:14px 18px 0; margin:0; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+  th { font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+       color:var(--muted); font-weight:600; }
+  td.m { font-family:var(--mono); font-weight:600; }
+
+  .warn { padding:18px 20px; border-radius:14px; border:1px solid var(--border);
+          background:var(--accent-soft); box-shadow:var(--shadow); }
+  .warn h3 { margin:0 0 8px; font-size:15.5px; }
+  .warn p { margin:0 0 8px; font-size:13.5px; color:var(--ink); }
+  .warn p:last-child { margin:0; }
+  .warn code { font-family:var(--mono); font-size:12.5px; }
+
+  footer { color:var(--muted); font-size:12px; font-family:var(--mono); text-align:center; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">S1 · montage banc final · MD0630 + FTDI + ESP32</p>
+    <h1>Pull-ups 4,7 kΩ alimentés par le rail 5 V de l'ESP32</h1>
+    <p class="sub">Le câble FTDI n'a que <strong>3 fils</strong> (TXD / GND / RXD) — pas de fil VCC.
+      On prend donc le <strong>5 V sur l'ESP32</strong> pour alimenter les deux pull-ups.
+      <strong>Aucune soudure</strong>, tout se monte sur breadboard.</p>
+  </header>
+
+  <div class="card schematic">
+    <div class="scroll">
+      <svg class="diagram" viewBox="0 0 940 480" role="img"
+           aria-label="Montage: alim 12V vers le module MD0630, ESP32 fournit un rail 5V pour deux pull-ups 4.7k sur les lignes TX et RX, liaison croisée vers le FTDI, masse commune.">
+        <defs>
+          <marker id="a-tx" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--w-rxd)"/>
+          </marker>
+          <marker id="a-rx" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--w-txd)"/>
+          </marker>
+        </defs>
+
+        <!-- ===== GND rail ===== -->
+        <line x1="190" y1="430" x2="905" y2="430" stroke="var(--w-gnd)" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="200" cy="430" r="4.5" fill="var(--w-gnd)"/>
+        <circle cx="330" cy="430" r="4.5" fill="var(--w-gnd)"/>
+        <circle cx="770" cy="430" r="4.5" fill="var(--w-gnd)"/>
+        <circle cx="905" cy="430" r="4.5" fill="var(--w-gnd)"/>
+        <text x="500" y="452" fill="var(--muted)" font-family="var(--mono)" font-size="13" text-anchor="middle">MASSE COMMUNE — PSU(−) · module · FTDI · ESP32</text>
+
+        <!-- ===== 5V rail ===== -->
+        <line x1="540" y1="55" x2="660" y2="55" stroke="var(--w-5v)" stroke-width="3.5" stroke-linecap="round"/>
+        <text x="560" y="42" fill="var(--w-5v)" font-family="var(--mono)" font-size="12.5" font-weight="700">rail +5 V</text>
+
+        <!-- ===== wires ===== -->
+        <!-- 12V -->
+        <line x1="200" y1="270" x2="360" y2="270" stroke="var(--w-12v)" stroke-width="3.5" stroke-linecap="round"/>
+        <text x="280" y="261" fill="var(--w-12v)" font-family="var(--mono)" font-size="12.5" font-weight="700" text-anchor="middle">12 V</text>
+        <!-- PSU minus -->
+        <line x1="200" y1="330" x2="200" y2="430" stroke="var(--w-gnd)" stroke-width="3" stroke-linecap="round"/>
+        <!-- module GND -->
+        <path d="M360,335 L330,335 L330,430" fill="none" stroke="var(--w-gnd)" stroke-width="3" stroke-linejoin="round"/>
+        <!-- FTDI GND -->
+        <line x1="770" y1="330" x2="770" y2="430" stroke="var(--w-gnd)" stroke-width="3" stroke-linecap="round"/>
+        <!-- ESP32 GND -->
+        <path d="M880,80 L905,80 L905,430" fill="none" stroke="var(--w-gnd)" stroke-width="3" stroke-linejoin="round"/>
+
+        <!-- data: module TX -> FTDI RXD -->
+        <path d="M530,235 L575,235 L575,300 L682,300" fill="none" stroke="var(--w-rxd)" stroke-width="3" stroke-linejoin="round" marker-end="url(#a-tx)"/>
+        <!-- data: FTDI TXD -> module RX -->
+        <path d="M682,240 L630,240 L630,295 L538,295" fill="none" stroke="var(--w-txd)" stroke-width="3" stroke-linejoin="round" marker-end="url(#a-rx)"/>
+        <text x="640" y="345" fill="var(--muted)" font-family="var(--mono)" font-size="12" text-anchor="middle">TX ↔ RX croisés</text>
+
+        <!-- pull-up on TX line @ x=550 -->
+        <path d="M550,55 L550,90 L544,96 L556,103 L544,110 L556,117 L544,124 L550,130 L550,235"
+              fill="none" stroke="var(--w-5v)" stroke-width="2.6" stroke-linejoin="round"/>
+        <circle cx="550" cy="235" r="4" fill="var(--w-5v)"/>
+        <text x="562" y="118" fill="var(--w-5v)" font-family="var(--mono)" font-size="12" font-weight="700">4,7 kΩ</text>
+        <!-- pull-up on RX line @ x=605 -->
+        <path d="M605,55 L605,100 L599,106 L611,113 L599,120 L611,127 L599,134 L605,140 L605,295"
+              fill="none" stroke="var(--w-5v)" stroke-width="2.6" stroke-linejoin="round"/>
+        <circle cx="605" cy="295" r="4" fill="var(--w-5v)"/>
+        <text x="617" y="128" fill="var(--w-5v)" font-family="var(--mono)" font-size="12" font-weight="700">4,7 kΩ</text>
+
+        <!-- ===== components ===== -->
+        <!-- ESP32 -->
+        <rect x="660" y="20" width="220" height="85" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="770" y="52" fill="var(--ink)" font-family="var(--mono)" font-size="13.5" font-weight="700" text-anchor="middle">ESP32-S3</text>
+        <text x="770" y="70" fill="var(--muted)" font-family="var(--mono)" font-size="10.5" text-anchor="middle">branché en USB au PC</text>
+        <text x="670" y="88" fill="var(--w-5v)" font-family="var(--mono)" font-size="11.5" font-weight="700">5V</text>
+        <text x="872" y="97" fill="var(--w-gnd)" font-family="var(--mono)" font-size="11.5" font-weight="700" text-anchor="end">GND</text>
+
+        <!-- PSU -->
+        <rect x="60" y="240" width="140" height="120" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="130" y="292" fill="var(--ink)" font-family="var(--mono)" font-size="13.5" font-weight="700" text-anchor="middle">Alim 12 V</text>
+        <text x="130" y="310" fill="var(--muted)" font-family="var(--mono)" font-size="10.5" text-anchor="middle">limite 50–100 mA</text>
+        <text x="194" y="266" fill="var(--w-12v)" font-family="var(--mono)" font-size="13" font-weight="700" text-anchor="end">+</text>
+        <text x="194" y="326" fill="var(--w-gnd)" font-family="var(--mono)" font-size="13" font-weight="700" text-anchor="end">−</text>
+
+        <!-- Module -->
+        <rect x="360" y="200" width="170" height="165" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="445" y="272" fill="var(--ink)" font-family="var(--mono)" font-size="13.5" font-weight="700" text-anchor="middle">IVY MD0630</text>
+        <text x="445" y="290" fill="var(--muted)" font-family="var(--mono)" font-size="10.5" text-anchor="middle">TX open-drain</text>
+        <text x="368" y="274" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="600">VCC</text>
+        <text x="368" y="339" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="600">GND</text>
+        <text x="522" y="231" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="600" text-anchor="end">TX</text>
+        <text x="522" y="291" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="600" text-anchor="end">RX</text>
+
+        <!-- FTDI -->
+        <rect x="690" y="195" width="160" height="135" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.5"/>
+        <text x="770" y="272" fill="var(--ink)" font-family="var(--mono)" font-size="12.5" font-weight="700" text-anchor="middle">FTDI TTL-232R</text>
+        <text x="770" y="288" fill="var(--muted)" font-family="var(--mono)" font-size="10" text-anchor="middle">3 fils blancs → PC</text>
+        <text x="700" y="236" fill="var(--w-txd)" font-family="var(--mono)" font-size="11" font-weight="700">TXD (2,5 V)</text>
+        <text x="700" y="304" fill="var(--w-rxd)" font-family="var(--mono)" font-size="11" font-weight="700">RXD (0,057 V)</text>
+        <text x="782" y="323" fill="var(--w-gnd)" font-family="var(--mono)" font-size="11" font-weight="700">GND (fil du milieu)</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--w-12v)"></i>12 V → module</span>
+      <span><i style="background:var(--w-5v)"></i>+5 V ESP32 + pull-ups</span>
+      <span><i style="background:var(--w-rxd)"></i>module TX → RXD</span>
+      <span><i style="background:var(--w-txd)"></i>module RX ← TXD</span>
+      <span><i style="background:var(--w-gnd)"></i>masse commune</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="step">
+      <p class="k">Étape 1</p>
+      <h3>Le rail 5 V</h3>
+      <p>Broche <strong>5V</strong> de l'ESP32 → rail <strong>«&nbsp;+&nbsp;»</strong> de la breadboard. L'ESP32 doit être <strong>branché en USB</strong>.</p>
+    </div>
+    <div class="step">
+      <p class="k">Étape 2</p>
+      <h3>Les 2 pull-ups</h3>
+      <p>Une <strong>4,7 kΩ</strong> du rail + vers la ligne <strong>TX</strong>, une autre vers la ligne <strong>RX</strong>. <strong>Sens indifférent.</strong></p>
+    </div>
+    <div class="step">
+      <p class="k">Étape 3</p>
+      <h3>Croiser + masses</h3>
+      <p>Module TX → fil <strong>RXD</strong>, module RX → fil <strong>TXD</strong>. Puis relie <strong>les 4 masses</strong> ensemble.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">Tableau de câblage — à cocher</p>
+    <div style="padding:6px 18px 16px;">
+      <table>
+        <thead><tr><th>Depuis</th><th>Vers</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="m">PSU (+) 12 V</td><td class="m">Module VCC</td><td>jamais le 5 V ici</td></tr>
+          <tr><td class="m">Module TX</td><td class="m">fil « 0,057 V » (RXD)</td><td>+ pull-up 4,7 k vers rail 5 V</td></tr>
+          <tr><td class="m">Module RX</td><td class="m">fil « 2,5 V » (TXD)</td><td>+ pull-up 4,7 k vers rail 5 V</td></tr>
+          <tr><td class="m">ESP32 5V</td><td class="m">rail + breadboard</td><td>alimente les 2 pull-ups</td></tr>
+          <tr><td class="m">PSU (−) · Module GND · FTDI GND · ESP32 GND</td><td class="m">rail − breadboard</td><td><strong>les 4 ensemble</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="warn">
+    <h3>⚠️ À vérifier avant de mettre sous tension</h3>
+    <p><b>1.</b> Le <b>12 V ne touche QUE le VCC du module</b> — jamais le rail 5 V, jamais le FTDI, jamais l'ESP32.</p>
+    <p><b>2.</b> Les <b>4 masses sont bien reliées</b> (PSU−, module, FTDI, ESP32). Sans ça, rien ne communique.</p>
+    <p><b>3.</b> Aucun <b>court-circuit</b> entre le rail + et le rail − (vérifie au multimètre en mode continuité, <b>hors tension</b> : ça ne doit <b>pas</b> biper).</p>
+  </div>
+
+  <div class="card">
+    <p class="card-title">Ensuite — la lecture</p>
+    <div style="padding:10px 18px 18px;">
+      <p style="margin:0 0 8px;font-size:14px;">Ouvre <strong>CT.exe</strong> → port COM du FTDI → <strong>9600 · 8 · N · 1</strong> → adresse <strong>1</strong> → <strong>Read</strong>.</p>
+      <p style="margin:0;font-size:13px;color:var(--muted);">Si ça ne répond pas : inverse TX↔RX, revérifie la masse commune, puis essaie 19200 / 4800.</p>
+    </div>
+  </div>
+
+  <footer>S1 · schéma logique — l'ordre physique des broches peut différer</footer>
+</div>

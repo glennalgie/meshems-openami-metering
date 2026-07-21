@@ -27,9 +27,6 @@
 //   ** It differs from the CT.db-derived order — treat as UNCONFIRMED. **
 // ---------------------------------------------------------------------------
 //
-// When validated, move to include/metering/modbus_md0630.h
-// and change the include below to: #include <metering/modbus_master.h>
-//
 #include <metering/modbus_master.h>
 
 class Modbus_MD0630 : public ModbusMaster {
@@ -49,14 +46,17 @@ class Modbus_MD0630 : public ModbusMaster {
     //    Defaults from the Preliminary Modbus Dev Spec. Overwrite any field
     //    once the real offsets are known (probeRegisters() / IVY protocol doc).
     // ===================================================================
+    // *** CONFIRMED 2026-07-20 by live device + IVY CT.exe frames (FC03, x0.1 mA) ***
+    // CT.exe reads 3 groups: 0x0000..0x0005, 0x0100, 0x0110..0x0111.
     struct RegMap {
-        uint16_t ac_leakage = 0x0000;   // R    real-time AC leakage   (x0.1 mA)
-        uint16_t dc_leakage = 0x0001;   // R    real-time DC leakage   (x0.1 mA)
-        uint16_t status     = 0x0002;   // R    fault / alarm bitmask
-        uint16_t identity   = 0x0003;   // R    model / firmware id
-        uint16_t ac_thresh  = 0x0004;   // R/W  AC alarm threshold     (x0.1 mA, default 300 = 30 mA)
-        uint16_t dc_thresh  = 0x0005;   // R/W  DC alarm threshold     (x0.1 mA, default  60 =  6 mA)
-        uint16_t slave_addr = 0x0006;   // R/W  Modbus slave address   (1..247)
+        uint16_t dc_leakage = 0x0000;   // R    DC leakage current  (x0.1 mA)
+        uint16_t ac_leakage = 0x0001;   // R    AC leakage current  (x0.1 mA)
+        uint16_t dc_thresh  = 0x0002;   // R/W  DC alarm threshold  (x0.1 mA, default  60 =  6.0 mA)
+        uint16_t ac_thresh  = 0x0003;   // R/W  AC alarm threshold  (x0.1 mA, default 300 = 30.0 mA)
+        uint16_t version    = 0x0100;   // R    firmware version     (read 1 reg)
+        uint16_t minor_ver  = 0x0111;   // R    firmware minor version
+        // NOTE: which of 0x0000/0x0001 is DC vs AC assumed from DC-before-AC ordering
+        // (matches the threshold layout); confirm by inducing a known DC/AC leak.
     };
     RegMap reg;                         // edit fields to re-map when offsets confirmed
     float  ma_scale = 0.1f;             // raw register value -> mA (Glenn spec: 1 unit = 0.1 mA)
