@@ -1,8 +1,8 @@
 ---
-title: "S1 — IVY MD0630 Leakage Sensor: RS-485 / Modbus Bring-up & Register Map"
+title: "S1 & S2 — IVY MD0630 Leakage Sensor: Modbus Bring-up, Register Map & Live ESP32 Read"
 subtitle: "OpenAMI / MeshEMS — Continuous Leakage Detection (NESL)"
 author: "Allahaddje Bonheur — IoT Fellow, 10Power (in collaboration with NESL)"
-date: "2026-07-20"
+date: "2026-07-22"
 format:
   pdf:
     documentclass: scrartcl
@@ -25,8 +25,9 @@ Sprint **S1** of the leakage-detection assignment (supervisor: Glenn, NESL): get
 serial communication working — first PC → IVY RCM CT** — and **derive the Modbus register map**
 (offsets, function code, scaling) so the ESP32 driver (S2) can read continuous AC/DC leakage.
 
-**Result: S1 is complete.** The module communicates, and the full register map has been derived from
-the live device and independently confirmed against IVY's own PC tool (`CT.exe`).
+**Result: S1 and S2 are both complete.** The module communicates, the full register map has been
+derived from the live device and confirmed against IVY's own PC tool (`CT.exe`), and the ESP32 driver
+now reads the live module **reliably over its own RS-485/UART bus** (Section on S2).
 
 ## Bench setup
 
@@ -115,14 +116,53 @@ RX : 01 03 0C 00 00 00 00 00 3C 01 2C 01 2D 00 00 ...
 - **Driver updated.** `include/metering/modbus_md0630.h` `RegMap` and `read_fc = FC_HOLDING` now carry
   these confirmed offsets; the mock pipeline (data model → MQTT `subpanel_RCMleaks`) is unchanged.
 
-## Next steps (S2 / S3)
+## S2 — Live read on the ESP32
 
-1. **S2 — real read:** wire the module onto the **ESP32 RS-485/UART bus** (production path, not the PC
-   USB-TTL used here) and read continuous AC/DC leakage into the energy data model.
-2. **S3 — threshold writes:** write `0x0002` (DC) / `0x0003` (AC) via **FC 0x06**, value = mA × 10.
-   `CT.exe` shows an `unLock ID` step, so verify the unlock sequence first, and **always read back to
-   confirm** (per Glenn). Default life-safety values: DC **6 mA**, AC **30 mA**.
-3. **Confirm DC-vs-AC** of `0x0000`/`0x0001` by inducing a known leak.
+With the register map known, the module was moved from the PC USB-TTL onto the **ESP32's own
+RS-485/UART bus** and the `Modbus_MD0630` driver was switched from mock to **real reads**.
+
+### Wiring (ESP32)
+
+| Module | ESP32 | Note |
+|--------|-------|------|
+| TX  | **GPIO42** (RS485_1 RX) | + 4.7 kΩ pull-up to **3V3** |
+| RX  | **GPIO7** (RS485_1 TX)  | + 4.7 kΩ pull-up to **3V3** |
+| GND | GND | common ground (ESP32 + module + 12 V PSU−) |
+| VCC | **12 V** PSU | never the ESP32 |
+
+The MD0630 is UART, so it connects **directly** to the ESP32 UART pins (no RS-485 transceiver).
+Pull-ups go to **3V3** — the ESP32-S3 GPIOs are **not** 5 V tolerant. The pins are the **GPIO numbers
+42 / 7**, not the silkscreen "RX"/"TX" (which are the USB console UART, GPIO44/43).
+
+### Evidence — serial capture (module at rest)
+
+```text
+SETUP: MODBUS: MD0630 leakage CT: address:1
+MD0630 [addr:1 fc:0x03]: AC=0.00 mA  DC=0.00 mA  (ok:9  fail:0)
+MD0630 [addr:1 fc:0x03]: AC=0.00 mA  DC=0.00 mA  (ok:10 fail:0)
+MD0630 [addr:1 fc:0x03]: AC=0.00 mA  DC=0.00 mA  (ok:11 fail:0)
+MD0630 [addr:1 fc:0x03]: AC=0.00 mA  DC=0.00 mA  (ok:12 fail:0)
+```
+
+**12 consecutive successful reads, 0 failures.** The driver reads `0x0000`/`0x0001` at FC 0x03, scales
+×0.1 mA, and feeds `leakageModel` (published on `subpanel_RCMleaks`).
+
+### Two gotchas resolved
+
+- **Wrong pins:** the module was first on the silkscreen "RX/TX" (USB console, GPIO44/43) instead of
+  **GPIO42/GPIO7** → timeouts; moving to the numbered pins gave the first successful read.
+- **Address collision:** the SHT20 is polled at address 1 — the same as the CT during bring-up →
+  intermittent reads. A `LEAKAGE_BRINGUP` build flag skips the SHT20 poll → reliable reads. In
+  production the CT is commissioned to node 100, so both coexist.
+
+## Next steps (S3)
+
+1. **S3 — threshold writes:** write `0x0002` (DC) / `0x0003` (AC) via **FC 0x06**, value = mA × 10.
+   `CT.exe` shows an `unLock ID` step, so derive/verify the unlock sequence first (by sniffing a
+   `CT.exe` write), and **always read back to confirm** (per Glenn). Default life-safety values:
+   DC **6 mA**, AC **30 mA**.
+2. **Confirm DC-vs-AC** of `0x0000`/`0x0001` by inducing a known leak.
+3. **Production:** commission the CT to node **100**, remove `LEAKAGE_BRINGUP`, re-enable WiFi/MQTT.
 
 ---
 
