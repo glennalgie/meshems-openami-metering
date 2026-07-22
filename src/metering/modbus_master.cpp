@@ -142,13 +142,10 @@ static void setup_sht20() {
 // With LEAKAGE_MOCK the register map is not needed: the driver synthesises a
 // rising leakage so the data model, MQTT and Insights run end to end.
 static void setup_md0630() {
-#if defined(LEAKAGE_PROBE)
-    // Bring-up: talk to the module at its FACTORY DEFAULT address 1 (confirmed
-    // from IVY's PC tool), not the future node 100 (module not reprogrammed yet).
+    // The physical module ships at factory address 1 (confirmed via IVY CT.exe).
+    // S3 commissioning will reprogram it to MD0630_ADDR (100). Until then, talk to
+    // it at address 1 for both probe and real reads.
     const uint8_t addr = 1;
-#else
-    const uint8_t addr = MD0630_ADDR;
-#endif
     Serial.printf("SETUP: MODBUS: MD0630 leakage CT: address:%d\n", addr);
     md0630.set_modbus_address(addr);
     md0630.begin(addr, _modbus1);
@@ -421,9 +418,14 @@ LeakageModel& get_leakage_model() { return leakageModel; }
 void loop_modbus_master() {
     if (millis() - lastPollMillis > ModbusMaster_pollrate) {
         Serial.println("Starting poll cycle...");
+#if !defined(LEAKAGE_BRINGUP)
         poll_thermostats();   // always poll SHT20 regardless of energy meter type
+#endif
 #if defined(ENABLE_LEAKAGE_MD0630)
         poll_leakage();       // AC+DC residual current (real module or mock ramp)
+        // NOTE: LEAKAGE_BRINGUP skips the SHT20 poll — during bench bring-up the
+        // module sits at address 1 (same as the SHT20), so polling both collides.
+        // Remove the flag in production where the CT is commissioned to node 100.
 #endif
         poll_energy_meters();
         lastPollMillis = millis();
