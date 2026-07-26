@@ -87,6 +87,31 @@ class Modbus_MD0630 : public ModbusMaster {
     static constexpr float AC_THRESHOLD_MA = 30.0f;
     static constexpr float DC_THRESHOLD_MA = 6.0f;
 
+    // ===================================================================
+    // 5. CONFIG-TIME threshold writes (S3) — FC06, unlock → write → read-back
+    //    *** CONFIG TIME ONLY — never call from the poll loop ***
+    // ===================================================================
+    enum Channel : uint8_t { CH_DC, CH_AC };
+
+    // Optional unlock before a write. CT.exe shows an "unLock ID" step; the exact
+    // sequence is NOT yet known — derive it by sniffing a CT.exe "Set" and fill
+    // these in. Until then leave unlock_required=false and try a direct write
+    // (if it returns an exception, unlock is needed).
+    bool     unlock_required = false;
+    uint16_t unlock_reg      = 0x0000;     // TODO: from CT.exe write-frame sniff
+    uint16_t unlock_value    = 0x0000;     // TODO: from CT.exe write-frame sniff
+
+    // Write a threshold in mA (raw = mA / ma_scale, i.e. mA×10), then READ BACK
+    // and confirm. Returns ku8MBSuccess only if the read-back matches. Only ever
+    // writes reg.dc_thresh / reg.ac_thresh (never an unknown register).
+    uint8_t  writeThreshold_mA(Channel ch, float mA);
+
+    // Read one threshold back, in mA (-1 on failure).
+    float    readThreshold_mA(Channel ch);
+
+    // Seed life-safety defaults (DC 6 mA, AC 30 mA). Call ONCE at commissioning.
+    uint8_t  applySafetyDefaults();
+
     float    getAcLeakage_mA();
     float    getDcLeakage_mA();
     uint16_t getFailCount();
@@ -94,6 +119,7 @@ class Modbus_MD0630 : public ModbusMaster {
 
   private:
     uint8_t  read_regs(uint16_t addr, uint8_t count);  // dispatch to FC03 or FC04
+    uint8_t  unlock();                                  // optional pre-write unlock (S3)
     uint8_t  poll_real();
     uint8_t  poll_mock();
 

@@ -120,6 +120,62 @@ uint8_t Modbus_MD0630::poll_mock() {
     return ku8MBSuccess;
 }
 
+// ---- S3: config-time threshold writes (FC06) -----------------------------
+// Optional unlock step before a write. Disabled by default (sequence unknown —
+// derive by sniffing a CT.exe "Set"). When enabled, writes unlock_reg=unlock_value.
+uint8_t Modbus_MD0630::unlock() {
+    if (!unlock_required) return ku8MBSuccess;
+    uint8_t r = writeSingleRegister(unlock_reg, unlock_value);
+    Serial.printf("MD0630 unlock: reg 0x%04X = 0x%04X -> %s\n",
+                  unlock_reg, unlock_value, r == ku8MBSuccess ? "ok" : "FAIL");
+    return r;
+}
+
+float Modbus_MD0630::readThreshold_mA(Channel ch) {
+    uint16_t addr = (ch == CH_DC) ? reg.dc_thresh : reg.ac_thresh;
+    if (read_regs(addr, 1) == ku8MBSuccess) return getResponseBuffer(0) * ma_scale;
+    return -1.0f;
+}
+
+// Glenn's rule: unlock -> write (FC06) -> read-back -> confirm. CONFIG TIME ONLY.
+uint8_t Modbus_MD0630::writeThreshold_mA(Channel ch, float mA) {
+    const char* name = (ch == CH_DC) ? "DC" : "AC";
+    uint16_t addr = (ch == CH_DC) ? reg.dc_thresh : reg.ac_thresh;
+    uint16_t raw  = (uint16_t)lroundf(mA / ma_scale);   // mA -> raw (x10): 6.0 -> 60
+
+    if (unlock() != ku8MBSuccess) {
+        Serial.printf("MD0630 %s threshold: unlock FAILED — aborting write\n", name);
+        return 0xE0;
+    }
+
+    uint8_t w = writeSingleRegister(addr, raw);          // FC06
+    if (w != ku8MBSuccess) {
+        Serial.printf("MD0630 %s threshold WRITE FAIL: reg 0x%04X val %u err=0x%02X (%s)\n",
+                      name, addr, raw, w, mbErrStr(w));
+        return w;
+    }
+
+    // read-back to confirm (never trust a write without it)
+    uint16_t back = 0xFFFF;
+    if (read_regs(addr, 1) == ku8MBSuccess) back = getResponseBuffer(0);
+    if (back == raw) {
+        Serial.printf("MD0630 %s threshold set to %.1f mA (reg 0x%04X = %u) — read-back OK\n",
+                      name, mA, addr, raw);
+        return ku8MBSuccess;
+    }
+    Serial.printf("MD0630 %s threshold MISMATCH: wrote %u, read back %u (reg 0x%04X)\n",
+                  name, raw, back, addr);
+    return 0xE4;   // read-back mismatch
+}
+
+// Seed life-safety defaults at commissioning: DC 6 mA, AC 30 mA.
+uint8_t Modbus_MD0630::applySafetyDefaults() {
+    Serial.println("MD0630: applying life-safety threshold defaults (DC 6 mA / AC 30 mA)");
+    uint8_t rDc = writeThreshold_mA(CH_DC, DC_THRESHOLD_MA);   // 6.0 mA
+    uint8_t rAc = writeThreshold_mA(CH_AC, AC_THRESHOLD_MA);   // 30.0 mA
+    return (rDc == ku8MBSuccess && rAc == ku8MBSuccess) ? ku8MBSuccess : 0xE5;
+}
+
 // Safe register verification (Preliminary Spec section 2): READ before any WRITE,
 // so we never write to an unknown offset and corrupt calibration. Run once with a
 // real module attached; the log tells us FC03 vs FC04 and where the values live.

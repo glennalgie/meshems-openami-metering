@@ -156,6 +156,14 @@ static void setup_md0630() {
                        0.0f, 0.1f,  9.0f);   // DC: 0 ->  9 mA at 0.1 mA/s  (crosses  6 mA at ~60 s)
     Serial.println("SETUP: MODBUS: MD0630 in MOCK RAMP mode — no hardware required");
 #endif
+#if defined(LEAKAGE_WRITE_DEFAULTS)
+    // S3 — one-shot COMMISSIONING: write the life-safety thresholds (DC 6 mA /
+    // AC 30 mA) via FC06 with read-back. Needs the REAL module (not mock).
+    // If the module needs an unlock first, set md0630.unlock_required + the
+    // unlock_reg/value (derive them by sniffing a CT.exe "Set") before this call.
+    // Enable via -DLEAKAGE_WRITE_DEFAULTS; run once, then disable.
+    md0630.applySafetyDefaults();
+#endif
 }
 #endif
 
