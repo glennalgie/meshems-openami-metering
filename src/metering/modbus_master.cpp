@@ -53,6 +53,7 @@
     // IVY MD0630 Type-B AC+DC residual-current monitor — shares the RS-485 bus.
     #include <metering/modbus_md0630.h>
     #include <metering/leakage_model_ivy41a.h>
+    #include <metering/leakage_energy_correlation.h>   // S4: energy-change cache
 #endif
 
 #if defined(METER_TYPE_ATM90E32)
@@ -96,6 +97,8 @@ Modbus_SHT20   sht20;                             // temperature/humidity sensor
 #if defined(ENABLE_LEAKAGE_MD0630)
 Modbus_MD0630  md0630;                            // AC+DC residual-current monitor
 LeakageModel   leakageModel;                      // published on subpanel_RCMleaks
+EnergyRing<CURRENT_HISTORY_SIZE> energyRing;      // S4: recent energy snapshots (128)
+LeakageInsightsCache leakageInsights;             // S4: leakage steps ↔ energy events
 #endif
 
 // Modbus energy meter objects — only for RTU meter types.
@@ -407,6 +410,23 @@ void poll_leakage() {
 #else
     if (md0630.poll() == ModbusMaster::ku8MBSuccess) {
         leakageModel.updateAll(md0630.getAcLeakage_mA(), 0.0f, md0630.getDcLeakage_mA());
+
+        // S4: record an energy snapshot and detect leakage steps correlated with
+        // an energy event (look back ±window in the ring). readings[0] carries the
+        // EMS energy (0 at a bare bench; drives real correlation once metering runs).
+        uint32_t now = millis();
+        energyRing.record(readings[0], now);
+        if (leakageInsights.update(md0630.getAcLeakage_mA(), now, energyRing)) {
+            const LeakageStep& s = leakageInsights.lastStep;
+            Serial.printf("MD0630 LEAKAGE STEP %s: %.2f -> %.2f mA | energy corr: %s",
+                          s.rising ? "UP" : "DOWN", s.from_mA, s.to_mA,
+                          s.energy.valid ? "yes" : "no");
+            if (s.energy.valid)
+                Serial.printf(" (V=%.1f I=%.2fA P=%.3fkW ramp=%.3fkW/s)",
+                              s.energy.voltage_V, s.energy.current_A,
+                              s.energy.activeP_kW, s.energy.ramp_kW_s);
+            Serial.println();
+        }
     }
 #endif
 }
