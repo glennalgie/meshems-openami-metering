@@ -54,6 +54,7 @@
     #include <metering/modbus_md0630.h>
     #include <metering/leakage_model_ivy41a.h>
     #include <metering/leakage_energy_correlation.h>   // S4: energy-change cache
+    #include <metering/leakage_insights_manager.h>     // S5: insights + nomination
 #endif
 
 #if defined(METER_TYPE_ATM90E32)
@@ -99,6 +100,7 @@ Modbus_MD0630  md0630;                            // AC+DC residual-current moni
 LeakageModel   leakageModel;                      // published on subpanel_RCMleaks
 EnergyRing<CURRENT_HISTORY_SIZE> energyRing;      // S4: recent energy snapshots (128)
 LeakageInsightsCache leakageInsights;             // S4: leakage steps ↔ energy events
+LeakageInsightsManager leakageInsights5;          // S5: per-EMS insights + nomination
 #endif
 
 // Modbus energy meter objects — only for RTU meter types.
@@ -425,6 +427,40 @@ void poll_leakage() {
         // EMS energy (0 at a bare bench; drives real correlation once metering runs).
         uint32_t now = millis();
         energyRing.record(readings[0], now);
+
+#if defined(LEAKAGE_S5_DEMO)
+        // S5 leak-test harness: this EMS (self) + two simulated peers (mid / far) on
+        // the same feeder → run a nomination round and print the MQTT payloads.
+        leakageInsights5.updateSelf(md0630.getAcLeakage_mA(), md0630.getDcLeakage_mA(), false, now);
+        {
+            static uint32_t lastS5 = 0;
+            if (leakageInsights5.state() != LK_NORMAL && now - lastS5 > 3000) {
+                lastS5 = now;
+                const float selfAc = leakageInsights5.self().ac_mA;
+                const uint32_t on  = leakageInsights5.self().onset_ts;
+                leakageInsights5.clearPeers();
+                LeakageNode mid = {}; strncpy(mid.ems_id, "street-ems-04", 23);
+                mid.phase = leakageInsights5.phase; mid.ac_mA = selfAc * 0.40f;
+                mid.onset_ts = on; mid.valid = true;
+                { float s[5] = {0.10f,0.15f,0.10f,0.05f,0.10f}; for (int i=0;i<5;i++) mid.pushSig(s[i]); }
+                LeakageNode far = {}; strncpy(far.ems_id, "street-ems-01", 23);
+                far.phase = leakageInsights5.phase; far.ac_mA = selfAc * 0.10f;
+                far.onset_ts = on; far.valid = true;
+                { float s[5] = {0.12f,0.14f,0.11f,0.06f,0.10f}; for (int i=0;i<5;i++) far.pushSig(s[i]); }
+                leakageInsights5.addPeer(mid); leakageInsights5.addPeer(far);
+
+                LeakageRound r = leakageInsights5.nominate(now);
+                JsonDocument tj; leakageInsights5.selfTelemetry(tj.to<JsonObject>());
+                String s1; serializeJson(tj, s1); Serial.print("S5 telemetry: "); Serial.println(s1);
+                if (r.ran) {
+                    JsonDocument ij; leakageInsights5.roundJson(r, ij.to<JsonObject>());
+                    String s2; serializeJson(ij, s2); Serial.print("S5 isolation: "); Serial.println(s2);
+                    JsonDocument aj; leakageInsights5.alertJson(r, aj.to<JsonObject>(), now);
+                    String s3; serializeJson(aj, s3); Serial.print("S5 alert    : "); Serial.println(s3);
+                }
+            }
+        }
+#endif
         if (leakageInsights.update(md0630.getAcLeakage_mA(), now, energyRing)) {
             const LeakageStep& s = leakageInsights.lastStep;
             Serial.printf("MD0630 LEAKAGE STEP %s: %.2f -> %.2f mA | energy corr: %s",
