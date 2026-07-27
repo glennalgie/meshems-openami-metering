@@ -50,7 +50,21 @@ S5 logic.
   direction isolation.
 - The sub-300 ms life-safety trip stays on the module's **hardware** fault line — never here.
 
-## Status & next (S5 v2)
+## S5 v2 — MQTT over the real network (proven 2026-07-27)
+The ESP32 connects to WiFi (a phone hotspot) and to a **Mosquitto broker on the PC** (broker IP set in
+the gitignored `secrets.h`; `config.h` now allows the override). The leakage flows end to end and the
+PC subscriber receives it, fault included:
+```
+openami/StreetEMS_<id>/subpanel_RCMleaks
+  {"acSinusoidal":{"value_mA":30.66,"threshold_mA":30,"inFault":true},
+   "dc":{"value_mA":6.13,"threshold_mA":6,"inFault":true}, ...}
+```
+Note: a **WPA3 / PMF** phone hotspot blocked the ESP32 (older WiFi stack) — a **WPA2** hotspot worked.
+Remaining v2 wiring: publish the S5 **telemetry / isolation / alert** on the shared `lvfeeder/…`
+topics (currently the S5 payloads are built + proven on serial; the EMS leakage flows on
+`subpanel_RCMleaks`), and subscribe to **real peers**.
+
+## Status & next
 - **S5 core complete** — insights + nomination + 3-EMS proof; compiles, verified on-device.
 - Remaining integration (v2): **publish** telemetry/isolation/alert on the real MQTT topics from the
   MQTT loop, and **subscribe** to real peers' telemetry (replace the injected peers). Then a real

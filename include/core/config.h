@@ -1,14 +1,21 @@
 #pragma once
 #include <Arduino.h>
 
+// Local overrides (gitignored). Lets secrets.h set MQTT_SERVER / WiFi creds.
+#if __has_include(<secrets.h>)
+  #include <secrets.h>
+#endif
+
 #define MAX_DEVICE_ID_CHARS   32
 #define DEVICE_ID_PREFIX      "StreetEMS_"
 
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"
 #define MQTT_PUBLISH_INTERVAL   30000
-// Local Mosquitto broker on this PC's WiFi IP (anonymous connection).
+// Local Mosquitto broker on this PC's WiFi IP (anonymous connection). Override in secrets.h.
+#ifndef MQTT_SERVER
 #define MQTT_SERVER             "10.0.0.116"              // local PC running Mosquitto
+#endif
 #define MQTT_USER               ""                        // empty = anonymous (local Mosquitto)
 #define MQTT_PW                 ""
 //#define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
