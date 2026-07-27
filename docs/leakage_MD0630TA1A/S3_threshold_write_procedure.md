@@ -46,18 +46,24 @@ disable.
 - Writes target only the two confirmed threshold registers.
 - Do **not** click CT.exe's **Calibration** button (factory-only).
 
-## Bench result (2026-07-26) — UNLOCK CONFIRMED REQUIRED
-Tested on the real module (ESP32, addr 1). A distinctive write proves the point:
+## Bench result (2026-07-26) — ✅ SOLVED: it was the FUNCTION CODE, not an unlock
+First finding: an FC 0x06 (write single) was **accepted but silently ignored** (wrote 27 → stayed 30).
+We suspected an unlock — but **sniffing IVY CT.exe** while it wrote a threshold showed the truth:
 ```
-S3 TEST: AC threshold before=30.0 mA, wrote 27.0 -> after=30.0 mA => write IGNORED (UNLOCK REQUIRED)
-MD0630 AC threshold MISMATCH: wrote 270, read back 300 (reg 0x0003)
+Write : 00 10 00 03 00 01 02 01 0E 2B A7      <- FC 0x10 (write MULTIPLE), reg 0x0003 = 0x010E = 270 = 27.0 mA
+Read  : 00 10 00 03 00 01 F0 18               <- success, NO unlock frame anywhere
 ```
-The FC06 write is **accepted (no exception) but silently ignored** — the register stays at 300. So
-**path A (direct write) is ruled out: an unlock is required.** The read-back safety caught it; module
-thresholds remain at the factory 6/30 mA (safe). → Proceed with **path B: derive the unlock** by
-sniffing a CT.exe "Set" (or decompiling CT.exe), then set `unlock_required=true` + `unlock_reg/value`.
+**The MD0630 requires FC 0x10 (write multiple registers); FC 0x06 is silently ignored. There is NO
+unlock.** Fixed the driver to use `setTransmitBuffer` + `writeMultipleRegisters(addr, 1)`.
+
+Verified on the live module (direct FC16 writes, read-back each time):
+```
+AC(0x0003) start : 30 mA   ->  write 4 mA : reads 4 mA (CHANGED)  ->  restore : 30 mA
+DC(0x0002)       : 6 mA (unchanged)
+```
+Read-back matches the written value both ways; module left at the safe factory 6/30 mA.
 
 ## Status
-Write plumbing **done & validated** (FC06 + read-back + before/after diagnostic; a 40 ms settle delay
-was added before read-back). **Only the unlock frame remains** — derive it, plug it in, re-run
-`LEAKAGE_WRITE_DEFAULTS`, and S3 is complete. Next: **S5/S6** (S4 already done).
+**S3 SOLVED.** Threshold writes work via **FC 0x10 + read-back** (40 ms settle delay). `unlock_*`
+members are retained but unused (no unlock needed). `applySafetyDefaults()` (DC 6 / AC 30) works.
+Optional final touch: run `-DLEAKAGE_WRITE_DEFAULTS` on the ESP32 to re-confirm on-device. Next: S5/S6.

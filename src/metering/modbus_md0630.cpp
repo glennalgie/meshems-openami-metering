@@ -143,12 +143,12 @@ uint8_t Modbus_MD0630::writeThreshold_mA(Channel ch, float mA) {
     uint16_t addr = (ch == CH_DC) ? reg.dc_thresh : reg.ac_thresh;
     uint16_t raw  = (uint16_t)lroundf(mA / ma_scale);   // mA -> raw (x10): 6.0 -> 60
 
-    if (unlock() != ku8MBSuccess) {
-        Serial.printf("MD0630 %s threshold: unlock FAILED — aborting write\n", name);
-        return 0xE0;
-    }
-
-    uint8_t w = writeSingleRegister(addr, raw);          // FC06
+    // The MD0630 requires FC 0x10 (write MULTIPLE registers); FC 0x06 (write
+    // single) is silently ignored — no error, but the register never changes.
+    // Confirmed against IVY CT.exe's own frames: 00 10 00 03 00 01 02 01 0E ...
+    // No unlock step is needed (there was no unlock — it was the wrong function).
+    setTransmitBuffer(0, raw);
+    uint8_t w = writeMultipleRegisters(addr, 1);         // FC16, qty = 1
     if (w != ku8MBSuccess) {
         Serial.printf("MD0630 %s threshold WRITE FAIL: reg 0x%04X val %u err=0x%02X (%s)\n",
                       name, addr, raw, w, mbErrStr(w));
