@@ -87,7 +87,8 @@ bool poll() {                       // true if any line changed since last poll
 }
 ```
 
-Wired in `poll_leakage()`:
+Serviced by `service_leakage_alarms()`, called **every `loop()` iteration** (~50 Hz), decoupled
+from the slow Modbus poll:
 
 ```cpp
 if (leakageAlarms.poll())
@@ -127,6 +128,20 @@ S6 ALARM edge: AC=0 DC=0 FAULT=0          # at rest, no leakage — quiet (after
 The first flash (assuming active-low) falsely reported `AC=1 DC=1` at rest; reading the real level
 showed the outputs sit **LOW at rest**, so the driver was switched to **active-high** and the rest
 state is now correctly quiet. FAULT stays 0 (AD unwired, held inactive by the internal pull-down).
+
+Driving the **AO line high** (3V3 pulse on GPIO39, standing in for a real trip) is logged **live**,
+each edge caught in < 200 ms — `DC`/`FAULT` correctly stay 0:
+
+```text
+S6 ALARM edge: AC=1 DC=0 FAULT=0          # AO asserted
+S6 ALARM edge: AC=0 DC=0 FAULT=0          # AO released
+S6 ALARM edge: AC=1 DC=0 FAULT=0
+S6 ALARM edge: AC=0 DC=0 FAULT=0
+```
+
+To make this reliable, the alarm lines are sampled by `service_leakage_alarms()` at **~50 Hz in the
+main loop** — decoupled from the ~seconds-long Modbus poll — so a trip is logged within ~20 ms
+instead of up to a poll period late.
 
 **Bench runsheet (module on the ESP32).**
 

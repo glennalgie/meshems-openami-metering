@@ -32,7 +32,10 @@ S2 (live read), S3 (FC16 write + read-back), and feeds S5 (nomination confidence
   **5 V header** outputs (not the 12 V cable), share **GND**, pull-up is **internal** (no 3V3/5V wire).
 - **Safety:** ESP32 GPIO are **not** 5 V-tolerant. This path only **observes** the module's own trip;
   it never drives it.
-- **Wired in** `poll_leakage()` → `S6 ALARM edge: AC=.. DC=.. FAULT=..` on each transition.
+- **Serviced fast** by `service_leakage_alarms()`, called every `loop()` iteration (~50 Hz),
+  decoupled from the slow Modbus poll → a trip is logged within ~20 ms → `S6 ALARM edge: AC=.. DC=..
+  FAULT=..` on each transition. **Verified live on HW:** pulsing AO (GPIO39) toggles `AC=1`/`AC=0`
+  cleanly, `DC`/`FAULT` stay 0.
 
 ## Build flags (`platformio.ini`, both off by default)
 

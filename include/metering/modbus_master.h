@@ -30,6 +30,10 @@ uint16_t get_sht20_success_count();  // cumulative successful poll count (0 = no
 // ramp when LEAKAGE_MOCK is set, and is published on subpanel_RCMleaks.
 void          poll_leakage();
 LeakageModel& get_leakage_model();
+// S6-A: fast, decoupled service of the hardware alarm output lines — call every
+// loop() iteration so an alarm edge is logged within ~20 ms (no-op unless
+// LEAKAGE_ALARM_SENSE is set). Independent of the slow Modbus poll cycle.
+void          service_leakage_alarms();
 #endif
 
 

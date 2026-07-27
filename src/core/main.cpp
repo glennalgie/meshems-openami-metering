@@ -142,7 +142,7 @@ void setup() {
     generateDeviceID();
 
 #ifdef ENABLE_OLED_DISPLAY
-    SPI.begin(DISPLAY_CLK_PIN, -1, DISPLAY_MOSI_PIN, DISPLAY_CS_PIN);
+    // SPI.begin removed for I2C OLED bring-up — GPIO11/12 are now driven as I2C (SDA/SCL) by the display lib's Wire.begin()
     setup_display();
 
     _console.addLine(" Display up! next is WiFi/Eth, ");
@@ -245,6 +245,11 @@ void loop() {
         lastModbusMillis = millis();
         loop_modbus_master();
     }
+  #if defined(ENABLE_LEAKAGE_MD0630)
+    // S6-A: sense the MD0630 hardware alarm lines fast (every loop), decoupled from
+    // the slow Modbus poll above so a trip is logged within ~20 ms.
+    service_leakage_alarms();
+  #endif
 #endif
 
     // ==================== Modbus Client polling loop ====================

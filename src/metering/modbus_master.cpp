@@ -482,13 +482,9 @@ void poll_leakage() {
         // Feed the live export flag so nominate() can de-rate confidence under reverse flow.
         leakageInsights5.updateSelf(md0630.getAcLeakage_mA(), md0630.getDcLeakage_mA(), exporting_now, now);
 
-#if defined(LEAKAGE_ALARM_SENSE)
-        // S6-A: observe the module's hardware alarm output lines; log only on edges.
-        if (leakageAlarms.poll()) {
-            Serial.printf("S6 ALARM edge: AC=%d DC=%d FAULT=%d\n",
-                          leakageAlarms.ac(), leakageAlarms.dc(), leakageAlarms.fault());
-        }
-#endif
+        // S6-A alarm-line sensing is NOT done here — it runs in the fast, decoupled
+        // service_leakage_alarms() (every loop iteration) so a trip is caught within
+        // ~20 ms instead of up to a full Modbus poll period late.
 
 #if defined(LEAKAGE_S5_DEMO)
         // S5 leak-test harness: two simulated peers (mid / far) on the same feeder →
@@ -538,6 +534,21 @@ void poll_leakage() {
 }
 
 LeakageModel& get_leakage_model() { return leakageModel; }
+
+// S6-A: fast alarm-line service, called every loop() iteration (decoupled from the
+// slow Modbus poll). Samples at ~50 Hz and logs only on an edge, so a trip is caught
+// within ~20 ms. No-op unless LEAKAGE_ALARM_SENSE is set.
+void service_leakage_alarms() {
+#if defined(LEAKAGE_ALARM_SENSE)
+    static uint32_t last = 0;
+    uint32_t now = millis();
+    if (now - last < 20) return;               // ~50 Hz, cheap debounce
+    last = now;
+    if (leakageAlarms.poll())
+        Serial.printf("S6 ALARM edge: AC=%d DC=%d FAULT=%d\n",
+                      leakageAlarms.ac(), leakageAlarms.dc(), leakageAlarms.fault());
+#endif
+}
 #endif
 
 // --------------------------------------------------------------------------
