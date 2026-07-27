@@ -95,10 +95,15 @@ if (leakageAlarms.poll())
                   leakageAlarms.ac(), leakageAlarms.dc(), leakageAlarms.fault());
 ```
 
-**Wiring (safety).** The module's alarm outputs are 5–12 V; ESP32 GPIO are **not** 5 V-tolerant, so
-each output goes through an **opto-isolator / resistive divider** into `INPUT_PULLUP` GPIO, read
-**active-low**. Pins on the 865B: **GPIO 33 (AC), 34 (DC), 21 (fault)** — the documented spares.
-This path is **sense-only**: it observes the module's own trip, it does not command it.
+**Wiring (safety, no multimeter needed).** The module's alarm outputs are 5–12 V; ESP32 GPIO are
+**not** 5 V-tolerant, so each output goes through **one 4.7 kΩ resistor in series** into an
+`INPUT_PULLUP` GPIO, read **active-low**. A series resistor is safe for *any* output type: an
+open-collector reads LOW when active, and a push-pull 5 V high is clamped by the GPIO's internal ESD
+diode with the resistor limiting the injected current to ~0.36 mA. Use the module's **5 V header**
+outputs, share **GND**, and rely on the **internal** pull-up (no 3V3/5V rail wired). Pins on the bare
+**ESP32-S3-DevKitC-1**: **GPIO 39 (AO/AC), 40 (DO/DC), 21 (AD/fault)** — free, non-strapping header
+pins (GPIO 33/34 are not broken out on the devkit; remap on a custom PCB). This path is
+**sense-only**: it observes the module's own trip, it does not command it.
 
 ## Validation
 

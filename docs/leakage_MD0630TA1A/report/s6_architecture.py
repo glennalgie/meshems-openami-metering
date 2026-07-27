@@ -33,7 +33,7 @@ arrow(63,49,72,38,B)                        # B -> ESP32 (write path)
 ax.text(64,52,"Modbus RTU",ha="left",fontsize=7.4,color=MUT)
 
 # A path (bottom): hardware alarm lines -> opto -> GPIO
-box(37,4,26,14,"(A) Alarm sense","AC / DC / fault out\nopto / level-shift\nGPIO 33/34/21 in",edge=A,tcol=A)
+box(37,4,26,14,"(A) Alarm sense","AC / DC / fault out\n4.7k series -> GPIO\n39 / 40 / 21 in",edge=A,tcol=A)
 arrow(28,26,37,12,A)                        # module alarm outputs -> opto
 arrow(63,11,72,24,A)                        # opto -> ESP32 GPIO (read-only)
 ax.text(30,17,"5-12 V",ha="left",fontsize=7.2,color=MUT)

@@ -142,12 +142,14 @@
 
     // ============ MD0630 LEAKAGE ALARM OUTPUTS (S6-A, sense only) ============
     // The MD0630 asserts hardware alarm outputs when leakage trips. We SENSE them
-    // on spare GPIO through an opto/level-shift (module is 5-12 V; ESP32 GPIO are
-    // NOT 5 V-tolerant). Read-only: log + MQTT, never the trip. GPIO 33/34 are the
-    // documented spares on the 865B; GPIO 21 is a free general-purpose pin.
-    #define MD0630_ALARM_AC_PIN     GPIO_NUM_33  // AC leakage alarm output
-    #define MD0630_ALARM_DC_PIN     GPIO_NUM_34  // DC leakage alarm output
-    #define MD0630_ALARM_FAULT_PIN  GPIO_NUM_21  // general fault / self-test output
+    // through a 4.7k series resistor into INPUT_PULLUP GPIO (read-only: log + MQTT,
+    // never the trip). Pins below are SORTED OUT on the bare ESP32-S3-DevKitC-1
+    // header (GPIO 33/34 are NOT broken out on the devkit — they were 865B-only).
+    // GPIO 39/40/21 are free, non-strapping, and on the right header of the devkit.
+    // On a custom PCB (e.g. 865B), remap these to whatever that board routes.
+    #define MD0630_ALARM_AC_PIN     GPIO_NUM_39  // AC leakage alarm output (AO)
+    #define MD0630_ALARM_DC_PIN     GPIO_NUM_40  // DC leakage alarm output (DO)
+    #define MD0630_ALARM_FAULT_PIN  GPIO_NUM_21  // general fault / self-test output (AD)
 
     // ==================== RELAY ==========================
     #define RELAY_1_PIN 38  //Pin to toggle the onboard SSR, solid state relay - 5 vdc TTL TBD for larger ssr

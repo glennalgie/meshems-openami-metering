@@ -19,10 +19,16 @@ S2 (live read), S3 (FC16 write + read-back), and feeds S5 (nomination confidence
 
 - **Driver:** `include/metering/leakage_alarm_sense.h` (`LeakageAlarmSense`) — samples AC / DC / fault
   alarm outputs, reports **only on an edge**.
-- **Pins (865B, V3):** `MD0630_ALARM_AC_PIN = GPIO33`, `_DC_PIN = GPIO34`, `_FAULT_PIN = GPIO21`
-  (`include/core/pins.h`). `INPUT_PULLUP`, read **active-low**.
-- **Safety:** module outputs are 5–12 V → opto-isolator / resistive divider → 3.3 V GPIO. ESP32 GPIO
-  are **not** 5 V-tolerant. This path only **observes** the module's own trip; it never drives it.
+- **Pins (ESP32-S3-DevKitC-1):** `MD0630_ALARM_AC_PIN = GPIO39 (AO)`, `_DC_PIN = GPIO40 (DO)`,
+  `_FAULT_PIN = GPIO21 (AD)` (`include/core/pins.h`). `INPUT_PULLUP`, read **active-low**. GPIO 33/34
+  are **not** broken out on the bare devkit (they were 865B-only) — 39/40/21 are free, non-strapping
+  header pins. On a custom PCB, remap to whatever it routes.
+- **Level shift (no multimeter needed):** one **4.7 kΩ resistor in series** per line into the GPIO.
+  Safe for any output type — open-collector reads LOW when active; a push-pull 5 V high is clamped by
+  the GPIO's internal ESD diode with the 4.7 kΩ limiting the current to ~0.36 mA. Use the module's
+  **5 V header** outputs (not the 12 V cable), share **GND**, pull-up is **internal** (no 3V3/5V wire).
+- **Safety:** ESP32 GPIO are **not** 5 V-tolerant. This path only **observes** the module's own trip;
+  it never drives it.
 - **Wired in** `poll_leakage()` → `S6 ALARM edge: AC=.. DC=.. FAULT=..` on each transition.
 
 ## Build flags (`platformio.ini`, both off by default)
