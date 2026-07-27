@@ -160,12 +160,21 @@ static void setup_md0630() {
     Serial.println("SETUP: MODBUS: MD0630 in MOCK RAMP mode — no hardware required");
 #endif
 #if defined(LEAKAGE_WRITE_DEFAULTS)
-    // S3 — one-shot COMMISSIONING: write the life-safety thresholds (DC 6 mA /
-    // AC 30 mA) via FC06 with read-back. Needs the REAL module (not mock).
-    // If the module needs an unlock first, set md0630.unlock_required + the
-    // unlock_reg/value (derive them by sniffing a CT.exe "Set") before this call.
-    // Enable via -DLEAKAGE_WRITE_DEFAULTS; run once, then disable.
-    md0630.applySafetyDefaults();
+    // S3 — one-shot COMMISSIONING: write the life-safety thresholds via FC06 with
+    // read-back. Needs the REAL module (not mock). If an unlock is required, set
+    // md0630.unlock_required + unlock_reg/value (from a CT.exe "Set" sniff) first.
+    // PROOF-OF-WRITE: does a real write actually change the register? Set a
+    // distinctive value (AC 27 mA) and compare before/after → tells us clearly
+    // whether an unlock is required. Then restore the life-safety defaults.
+    float before = md0630.readThreshold_mA(Modbus_MD0630::CH_AC);
+    md0630.writeThreshold_mA(Modbus_MD0630::CH_AC, 27.0f);
+    delay(40);
+    float after = md0630.readThreshold_mA(Modbus_MD0630::CH_AC);
+    Serial.printf("S3 TEST: AC threshold before=%.1f mA, wrote 27.0 -> after=%.1f mA => write %s\n",
+                  before, after,
+                  (fabsf(after - 27.0f) < 0.5f) ? "APPLIED (no unlock needed!)"
+                                                : "IGNORED (UNLOCK REQUIRED)");
+    md0630.applySafetyDefaults();                            // restore DC 6 / AC 30
 #endif
 }
 #endif

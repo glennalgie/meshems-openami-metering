@@ -155,6 +155,8 @@ uint8_t Modbus_MD0630::writeThreshold_mA(Channel ch, float mA) {
         return w;
     }
 
+    delay(40);   // let the write settle before reading back (avoids RX timeout)
+
     // read-back to confirm (never trust a write without it)
     uint16_t back = 0xFFFF;
     if (read_regs(addr, 1) == ku8MBSuccess) back = getResponseBuffer(0);

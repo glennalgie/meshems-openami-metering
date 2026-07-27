@@ -46,6 +46,18 @@ disable.
 - Writes target only the two confirmed threshold registers.
 - Do **not** click CT.exe's **Calibration** button (factory-only).
 
+## Bench result (2026-07-26) — UNLOCK CONFIRMED REQUIRED
+Tested on the real module (ESP32, addr 1). A distinctive write proves the point:
+```
+S3 TEST: AC threshold before=30.0 mA, wrote 27.0 -> after=30.0 mA => write IGNORED (UNLOCK REQUIRED)
+MD0630 AC threshold MISMATCH: wrote 270, read back 300 (reg 0x0003)
+```
+The FC06 write is **accepted (no exception) but silently ignored** — the register stays at 300. So
+**path A (direct write) is ruled out: an unlock is required.** The read-back safety caught it; module
+thresholds remain at the factory 6/30 mA (safe). → Proceed with **path B: derive the unlock** by
+sniffing a CT.exe "Set" (or decompiling CT.exe), then set `unlock_required=true` + `unlock_reg/value`.
+
 ## Status
-Code **complete and compiling**; only the **unlock sequence** must be confirmed on hardware (A or B
-above). Then S3 = write + read-back validated. Next: **S4** (energy-change correlation cache).
+Write plumbing **done & validated** (FC06 + read-back + before/after diagnostic; a 40 ms settle delay
+was added before read-back). **Only the unlock frame remains** — derive it, plug it in, re-run
+`LEAKAGE_WRITE_DEFAULTS`, and S3 is complete. Next: **S5/S6** (S4 already done).
