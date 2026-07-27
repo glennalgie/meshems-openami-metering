@@ -84,8 +84,9 @@ class Modbus_MD0630 : public ModbusMaster {
     void     set_modbus_address(uint8_t addr);
 
     // confirmed default safety thresholds (datasheet)
-    static constexpr float AC_THRESHOLD_MA = 30.0f;
-    static constexpr float DC_THRESHOLD_MA = 6.0f;
+    static constexpr float AC_THRESHOLD_MA        = 30.0f;
+    static constexpr float DC_THRESHOLD_MA        = 6.0f;
+    static constexpr float AC_THRESHOLD_EXPORT_MA = 27.0f;  // reverse power flow (S6, Achim/Gismo)
 
     // ===================================================================
     // 5. CONFIG-TIME threshold writes (S3) — FC06, unlock → write → read-back

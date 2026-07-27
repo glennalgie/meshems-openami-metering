@@ -55,6 +55,9 @@
     #include <metering/leakage_model_ivy41a.h>
     #include <metering/leakage_energy_correlation.h>   // S4: energy-change cache
     #include <metering/leakage_insights_manager.h>     // S5: insights + nomination
+#if defined(LEAKAGE_ALARM_SENSE)
+    #include <metering/leakage_alarm_sense.h>           // S6-A: sense hardware alarm outputs
+#endif
 #endif
 
 #if defined(METER_TYPE_ATM90E32)
@@ -101,6 +104,9 @@ LeakageModel   leakageModel;                      // published on subpanel_RCMle
 EnergyRing<CURRENT_HISTORY_SIZE> energyRing;      // S4: recent energy snapshots (128)
 LeakageInsightsCache leakageInsights;             // S4: leakage steps ↔ energy events
 LeakageInsightsManager leakageInsights5;          // S5: per-EMS insights + nomination
+#if defined(LEAKAGE_ALARM_SENSE)
+LeakageAlarmSense leakageAlarms;                  // S6-A: sense the module's hardware alarm outputs
+#endif
 #endif
 
 // Modbus energy meter objects — only for RTU meter types.
@@ -156,6 +162,13 @@ static void setup_md0630() {
     md0630.begin(addr, _modbus1);
     leakageModel.acSinusoidal.threshold_mA = Modbus_MD0630::AC_THRESHOLD_MA;
     leakageModel.dc.threshold_mA           = Modbus_MD0630::DC_THRESHOLD_MA;
+#if defined(LEAKAGE_ALARM_SENSE)
+    // S6-A: sense (read-only) the module's AC/DC/fault alarm output lines. Active-low
+    // through an opto/level-shift. This does NOT drive the trip — it only observes it.
+    leakageAlarms.begin(MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN, true);
+    Serial.printf("SETUP: MODBUS: MD0630 alarm sense on GPIO %d/%d/%d (AC/DC/fault, active-low)\n",
+                  MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN);
+#endif
 #if defined(LEAKAGE_MOCK)
     md0630.setMockRamp(0.0f, 0.5f, 45.0f,    // AC: 0 -> 45 mA at 0.5 mA/s  (crosses 30 mA at ~60 s)
                        0.0f, 0.1f,  9.0f);   // DC: 0 ->  9 mA at 0.1 mA/s  (crosses  6 mA at ~60 s)
@@ -408,6 +421,37 @@ void poll_thermostats() {
 }
 
 #if defined(ENABLE_LEAKAGE_MD0630)
+// --------------------------------------------------------------------------
+// S6-B: reverse power flow → adaptive AC threshold (30 mA import / 27 mA export)
+// --------------------------------------------------------------------------
+static bool rf_exporting = false;   // committed export state (false = import)
+static int  rf_streak    = 0;       // debounce counter
+
+// True when the EMS is exporting (reverse power flow). Real path: meter active
+// power < 0. Demo (-DLEAKAGE_REVERSE_FLOW_DEMO): toggle every 20 s to exercise it.
+static bool get_reverse_flow_export(uint32_t now) {
+#if defined(LEAKAGE_REVERSE_FLOW_DEMO)
+    return ((now / 20000) % 2) == 1;
+#else
+    return readings[0].active_power < -0.05f;   // < -50 W = export
+#endif
+}
+
+// Write AC threshold 27 mA on import→export, 30 mA on export→import — ONLY on a
+// debounced transition (protects the module's threshold store). FC16 + read-back.
+static void update_reverse_flow_threshold(bool exporting_now, uint32_t now) {
+    (void)now;
+    if (exporting_now == rf_exporting) { rf_streak = 0; return; }
+    if (++rf_streak < 3) return;                 // debounce 3 poll cycles
+    rf_streak = 0;
+    rf_exporting = exporting_now;
+    float target = rf_exporting ? Modbus_MD0630::AC_THRESHOLD_EXPORT_MA
+                                : Modbus_MD0630::AC_THRESHOLD_MA;
+    Serial.printf("S6: reverse power flow %s -> writing AC threshold %.0f mA\n",
+                  rf_exporting ? "EXPORT" : "import", target);
+    md0630.writeThreshold_mA(Modbus_MD0630::CH_AC, target);
+}
+
 /**
  * Read AC + DC residual current into the leakage model — from the real module,
  * or synthesised when LEAKAGE_MOCK is set. The model is what
@@ -428,10 +472,26 @@ void poll_leakage() {
         uint32_t now = millis();
         energyRing.record(readings[0], now);
 
+        // S6-B: reverse power flow → adaptive AC threshold (30 mA import / 27 mA export).
+        // Debounced, transition-only FC16 write so we don't hammer the module store.
+        bool exporting_now = get_reverse_flow_export(now);
+        update_reverse_flow_threshold(exporting_now, now);
+
+        // S5: keep this EMS's insight state current every poll (telemetry + nomination input).
+        // Feed the live export flag so nominate() can de-rate confidence under reverse flow.
+        leakageInsights5.updateSelf(md0630.getAcLeakage_mA(), md0630.getDcLeakage_mA(), exporting_now, now);
+
+#if defined(LEAKAGE_ALARM_SENSE)
+        // S6-A: observe the module's hardware alarm output lines; log only on edges.
+        if (leakageAlarms.poll()) {
+            Serial.printf("S6 ALARM edge: AC=%d DC=%d FAULT=%d\n",
+                          leakageAlarms.ac(), leakageAlarms.dc(), leakageAlarms.fault());
+        }
+#endif
+
 #if defined(LEAKAGE_S5_DEMO)
-        // S5 leak-test harness: this EMS (self) + two simulated peers (mid / far) on
-        // the same feeder → run a nomination round and print the MQTT payloads.
-        leakageInsights5.updateSelf(md0630.getAcLeakage_mA(), md0630.getDcLeakage_mA(), false, now);
+        // S5 leak-test harness: two simulated peers (mid / far) on the same feeder →
+        // run a nomination round and print the MQTT payloads.
         {
             static uint32_t lastS5 = 0;
             if (leakageInsights5.state() != LK_NORMAL && now - lastS5 > 3000) {

@@ -140,6 +140,15 @@
     #define RS485_2_RX  GPIO_NUM_6 // Connects to HW-519 RXD
     #define RS485_2_TX  GPIO_NUM_4 // Connects to HW-519 RXD
 
+    // ============ MD0630 LEAKAGE ALARM OUTPUTS (S6-A, sense only) ============
+    // The MD0630 asserts hardware alarm outputs when leakage trips. We SENSE them
+    // on spare GPIO through an opto/level-shift (module is 5-12 V; ESP32 GPIO are
+    // NOT 5 V-tolerant). Read-only: log + MQTT, never the trip. GPIO 33/34 are the
+    // documented spares on the 865B; GPIO 21 is a free general-purpose pin.
+    #define MD0630_ALARM_AC_PIN     GPIO_NUM_33  // AC leakage alarm output
+    #define MD0630_ALARM_DC_PIN     GPIO_NUM_34  // DC leakage alarm output
+    #define MD0630_ALARM_FAULT_PIN  GPIO_NUM_21  // general fault / self-test output
+
     // ==================== RELAY ==========================
     #define RELAY_1_PIN 38  //Pin to toggle the onboard SSR, solid state relay - 5 vdc TTL TBD for larger ssr
 
