@@ -153,6 +153,7 @@ String topic_cmd;             // command topic (for 'southbound' commands)
 
 // Function prototype for mqtt_publish_json
 void mqtt_publish_json(const char* subtopic, const JsonDocument* payload);
+void mqtt_publish_retained_value(const char* subtopic, const char* payload);  // plain scalar (chartable)
 void mqtt_publish_retained_value(const char* subtopic, const char* payload);
 void mqtt_clear_retained_value(const char* subtopic);
 void mqtt_publish_openami_status(const char* status);
@@ -635,6 +636,14 @@ void mqtt_publish_Leakage(String meterId, const PowerData& meterData) {
   jsonDoc["timestamp"] = timestamp;
 
   mqtt_publish_json(topicBuf.c_str(), &jsonDoc);
+
+  // Plain-number topics so MQTT Explorer (and dashboards) can CHART the leakage
+  // live — MQTT Explorer only graphs topics whose payload is a single number.
+  char v[16];
+  snprintf(v, sizeof(v), "%.2f", leakageData.acSinusoidal.value_mA);
+  mqtt_publish_retained_value("rcm_ac_mA", v);
+  snprintf(v, sizeof(v), "%.2f", leakageData.dc.value_mA);
+  mqtt_publish_retained_value("rcm_dc_mA", v);
 }
 
 /*
