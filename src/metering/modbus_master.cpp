@@ -163,10 +163,11 @@ static void setup_md0630() {
     leakageModel.acSinusoidal.threshold_mA = Modbus_MD0630::AC_THRESHOLD_MA;
     leakageModel.dc.threshold_mA           = Modbus_MD0630::DC_THRESHOLD_MA;
 #if defined(LEAKAGE_ALARM_SENSE)
-    // S6-A: sense (read-only) the module's AC/DC/fault alarm output lines. Active-low
-    // through an opto/level-shift. This does NOT drive the trip — it only observes it.
-    leakageAlarms.begin(MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN, true);
-    Serial.printf("SETUP: MODBUS: MD0630 alarm sense on GPIO %d/%d/%d (AC/DC/fault, active-low)\n",
+    // S6-A: sense (read-only) the module's AC/DC/fault alarm output lines. The real
+    // MD0630 drives these LOW at rest and HIGH on alarm → ACTIVE-HIGH (measured on
+    // the bench), so active_low=false (INPUT_PULLDOWN). Does NOT drive the trip.
+    leakageAlarms.begin(MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN, false);
+    Serial.printf("SETUP: MODBUS: MD0630 alarm sense on GPIO %d/%d/%d (AC/DC/fault, active-high)\n",
                   MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN);
 #endif
 #if defined(LEAKAGE_MOCK)

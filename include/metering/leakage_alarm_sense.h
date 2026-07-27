@@ -8,10 +8,12 @@
 // MQTT. It is deliberately READ-ONLY: it never drives the trip.
 //
 // WIRING (module side 5-12 V, ESP32 GPIO are NOT 5 V-tolerant):
-//   MD0630 alarm output ── opto-isolator / resistive divider ──▶ ESP32 GPIO
-//   Configure the GPIO as INPUT_PULLUP and treat it ACTIVE-LOW: the opto
-//   transistor pulls the pin to GND when the module asserts its alarm. If your
-//   level-shift is non-inverting (active-high), pass active_low = false.
+//   MD0630 alarm output ── 4.7 kΩ series resistor ──▶ ESP32 GPIO
+//   MEASURED on the real MD0630 (2026-07-27): at rest the AO/DO outputs sit
+//   LOW and go HIGH on alarm → they are ACTIVE-HIGH. So pass active_low = false;
+//   pins then use INPUT_PULLDOWN, which also keeps an UNWIRED line (e.g. AD when
+//   you only have two resistors) reading inactive instead of floating.
+//   (active_low = true / INPUT_PULLUP is kept for opto or active-low outputs.)
 //
 // Modelled to match the lightweight driver style in this folder.
 //
@@ -29,7 +31,7 @@ class LeakageAlarmSense {
         lines_[0] = { ac_pin,    "ac_alarm", false, false };
         lines_[1] = { dc_pin,    "dc_alarm", false, false };
         lines_[2] = { fault_pin, "fault",    false, false };
-        for (auto& l : lines_) pinMode(l.pin, active_low_ ? INPUT_PULLUP : INPUT);
+        for (auto& l : lines_) pinMode(l.pin, active_low_ ? INPUT_PULLUP : INPUT_PULLDOWN);
         // prime last-state so the first poll() reports the real level as an edge
         for (auto& l : lines_) l.last = !read_active(l.pin);
     }

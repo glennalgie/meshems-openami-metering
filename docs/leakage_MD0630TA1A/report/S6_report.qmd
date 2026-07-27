@@ -80,7 +80,7 @@ module's **AC / DC / fault** alarm outputs and reports **only on an edge**:
 bool poll() {                       // true if any line changed since last poll
     bool changed = false;
     for (auto& l : lines_) {
-        l.active = read_active(l.pin);              // active-low through opto
+        l.active = read_active(l.pin);              // active-high (measured on the MD0630)
         if (l.active != l.last) { l.last = l.active; changed = true; }
     }
     return changed;
@@ -96,14 +96,15 @@ if (leakageAlarms.poll())
 ```
 
 **Wiring (safety, no multimeter needed).** The module's alarm outputs are 5–12 V; ESP32 GPIO are
-**not** 5 V-tolerant, so each output goes through **one 4.7 kΩ resistor in series** into an
-`INPUT_PULLUP` GPIO, read **active-low**. A series resistor is safe for *any* output type: an
-open-collector reads LOW when active, and a push-pull 5 V high is clamped by the GPIO's internal ESD
-diode with the resistor limiting the injected current to ~0.36 mA. Use the module's **5 V header**
-outputs, share **GND**, and rely on the **internal** pull-up (no 3V3/5V rail wired). Pins on the bare
+**not** 5 V-tolerant, so each output goes through **one 4.7 kΩ resistor in series** into the GPIO. A
+series resistor is safe for *any* output type: a push-pull 5 V high is clamped by the GPIO's internal
+ESD diode with the resistor limiting the injected current to ~0.36 mA. Use the module's **5 V header**
+outputs, share **GND**, and rely on the **internal** pull (no 3V3/5V rail wired). Pins on the bare
 **ESP32-S3-DevKitC-1**: **GPIO 39 (AO/AC), 40 (DO/DC), 21 (AD/fault)** — free, non-strapping header
-pins (GPIO 33/34 are not broken out on the devkit; remap on a custom PCB). This path is
-**sense-only**: it observes the module's own trip, it does not command it.
+pins (GPIO 33/34 are not broken out on the devkit; remap on a custom PCB). **Polarity was measured on
+the bench**: the MD0630 drives AO/DO **LOW at rest, HIGH on alarm** → **active-high**
+(`INPUT_PULLDOWN`; an unwired line reads inactive). This path is **sense-only**: it observes the
+module's own trip, it does not command it.
 
 ## Validation
 
@@ -114,21 +115,36 @@ pins (GPIO 33/34 are not broken out on the devkit; remap on a custom PCB). This 
 
 : Firmware builds clean with S6 disabled (no regression) and with every S6 path compiled in.
 
+**On-device (S6-A, flashed to the ESP32-S3-DevKitC-1, module powered, AO→GPIO39 / DO→GPIO40 via
+4.7 kΩ, GND common).** The boot log confirms the sense path and — importantly — the polarity was
+found and fixed on the bench:
+
+```text
+SETUP: MODBUS: MD0630 alarm sense on GPIO 39/40/21 (AC/DC/fault, active-high)
+S6 ALARM edge: AC=0 DC=0 FAULT=0          # at rest, no leakage — quiet (after fix)
+```
+
+The first flash (assuming active-low) falsely reported `AC=1 DC=1` at rest; reading the real level
+showed the outputs sit **LOW at rest**, so the driver was switched to **active-high** and the rest
+state is now correctly quiet. FAULT stays 0 (AD unwired, held inactive by the internal pull-down).
+
 **Bench runsheet (module on the ESP32).**
 
 1. Flash with `-DLEAKAGE_REVERSE_FLOW_DEMO` (leave `LEAKAGE_MOCK` off, module connected) → watch
    the AC threshold switch **30 ↔ 27 mA** every ~20 s in the serial log and confirm via a CT.exe
    read-back.
-2. For S6-A: wire the opto board, flash with `-DLEAKAGE_ALARM_SENSE`, induce a leak past 30 mA →
-   confirm the `S6 ALARM edge: AC=1 …` line appears as the module relay trips.
+2. **S6-A done:** AO→GPIO39 / DO→GPIO40 via 4.7 kΩ series, GND common, `-DLEAKAGE_ALARM_SENSE`
+   flashed → rest state verified quiet (above). Remaining: **induce a leak past 30 mA** so the module
+   trips its AO/DO output → confirm the `S6 ALARM edge: AC=1 …` line appears live.
 
 ## Status & next
 
-- **S6 complete (firmware)** — reverse-flow adaptive threshold (B) and hardware alarm sense (A)
-  implemented, gated behind build flags, and compiling in both the default and full-S6
-  configurations. S6-B reuses the S3 write path; S6-A adds a read-only observer.
-- **Bench capture** — run the runsheet above on the module to attach the serial screenshots
-  (same as S3 read-back / S5 charts).
+- **S6 complete (firmware) + S6-A verified on hardware** — reverse-flow adaptive threshold (B) and
+  hardware alarm sense (A) implemented, gated behind build flags, compiling in both the default and
+  full-S6 configurations. S6-A was flashed and its polarity fixed from a live bench reading. S6-B
+  reuses the S3 write path; S6-A adds a read-only observer.
+- **Bench capture remaining** — the reverse-flow 30↔27 mA switch (B) and a live alarm edge under a
+  real >30 mA leak (A), to attach as serial screenshots (same as S3 read-back / S5 charts).
 - Production polish: publish the alarm-line state and the active AC threshold on the MQTT feed
   alongside `rcm_ac_mA` / `rcm_dc_mA`.
 

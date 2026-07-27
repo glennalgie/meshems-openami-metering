@@ -20,9 +20,12 @@ S2 (live read), S3 (FC16 write + read-back), and feeds S5 (nomination confidence
 - **Driver:** `include/metering/leakage_alarm_sense.h` (`LeakageAlarmSense`) — samples AC / DC / fault
   alarm outputs, reports **only on an edge**.
 - **Pins (ESP32-S3-DevKitC-1):** `MD0630_ALARM_AC_PIN = GPIO39 (AO)`, `_DC_PIN = GPIO40 (DO)`,
-  `_FAULT_PIN = GPIO21 (AD)` (`include/core/pins.h`). `INPUT_PULLUP`, read **active-low**. GPIO 33/34
-  are **not** broken out on the bare devkit (they were 865B-only) — 39/40/21 are free, non-strapping
-  header pins. On a custom PCB, remap to whatever it routes.
+  `_FAULT_PIN = GPIO21 (AD)` (`include/core/pins.h`). GPIO 33/34 are **not** broken out on the bare
+  devkit (they were 865B-only) — 39/40/21 are free, non-strapping header pins. On a custom PCB, remap.
+- **Polarity (measured 2026-07-27):** the real MD0630 drives AO/DO **LOW at rest, HIGH on alarm** →
+  **active-high**, so `begin(..., active_low=false)` → `INPUT_PULLDOWN` (also keeps an unwired line
+  such as AD reading inactive, not floating). Confirmed on the bench: after the fix the rest state
+  reads `S6 ALARM edge: AC=0 DC=0 FAULT=0` (before it falsely read `AC=1 DC=1`).
 - **Level shift (no multimeter needed):** one **4.7 kΩ resistor in series** per line into the GPIO.
   Safe for any output type — open-collector reads LOW when active; a push-pull 5 V high is clamped by
   the GPIO's internal ESD diode with the 4.7 kΩ limiting the current to ~0.36 mA. Use the module's
