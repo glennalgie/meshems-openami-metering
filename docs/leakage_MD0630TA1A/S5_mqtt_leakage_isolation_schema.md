@@ -142,7 +142,7 @@ the others follow (they see the round open). This keeps the bus quiet in normal 
     { "ems_id": "street-ems-01", "ac_mA":  2.1, "ramp_ac_mA_s": 0.04, "rank": 3 }
   ],
   "nominated_ems": "street-ems-07",
-  "rule": "max_ac_mA__correlated_onset",
+  "rule": "max_ac_mA + min_peer_corr, correlated_onset",
   "confidence": 0.82,
   "action": "isolate_takeoff",
   "quorum": { "expected": 3, "reporting": 3 }
@@ -169,16 +169,30 @@ the others follow (they see the round open). This keeps the bus quiet in normal 
 2. **Collect** telemetry for a **settling window** (proposed **2 s**) — enough for all nodes to report.
 3. **Filter** to the same `phase` with a **correlated onset**: `|onset_ts − round.onset_ts| ≤ W`
    (proposed W = 5 s). Uncorrelated nodes are separate events, not this fault.
-4. **Rank** by `ac_mA` (resp. `dc_mA`) descending → **rank 1 = electrically closest**.
+4. **Rank** the correlated nodes two complementary ways and combine them:
+   - **(a) magnitude** — `ac_mA` / `dc_mA` descending; highest ≈ electrically closest;
+   - **(b) trend correlation ("odd one out")** — compute each node's mean cross-correlation of its
+     leakage **ramp signature** with the other nodes; the faulted node is the one that correlates
+     **least** with its peers (`argmin`). *Grounded in the faulty-feeder-ID literature
+     (`S5_literature_findings.md`): the real method nominates by **minimum correlation**, not maximum
+     amplitude — robust to EMS sitting at different feeder positions (heterogeneous levels).*
+   **Rank 1** = the node that is both high-magnitude **and** the lowest-correlation (odd-one-out).
 5. **Tie-break** deterministically: higher `ramp` wins; then lowest `ems_id` lexicographically — so
    every node computes the identical winner with no negotiation.
-6. **Confidence** = separation between rank 1 and rank 2, e.g.
-   `conf = (v1 − v2) / v1`, clamped to [0,1].
+6. **Confidence** = agreement of (a) and (b) plus the rank1–rank2 magnitude gap,
+   e.g. `conf = (v1 − v2) / v1` (clamped [0,1]), **boosted when the magnitude leader is also the
+   min-correlation node, cut when they disagree**.
 7. **Act:**
-   - `conf ≥ 0.3` **and** quorum met → **nominated EMS isolates its takeoff**, others hold.
-   - `conf < 0.3` (levels too close — fault likely *between* two cabinets) → **do not auto-isolate**;
-     raise the ops alert with both candidates.
+   - `conf ≥ 0.3` **and** quorum met → isolate (see scope below), others hold.
+   - `conf < 0.3` (levels too close / (a) and (b) disagree — fault likely *between* two cabinets) →
+     **do not auto-isolate**; raise the ops alert with both candidates.
    - quorum not met (a node silent) → alert only. **Never isolate on partial information.**
+
+**Isolation scope (from FLISR practice):** a fault is cleared by opening switches on **both sides** of
+the faulted section. So the nominated EMS opens its takeoff **and** signals its **downstream
+neighbour** to open — the leak is bracketed between the two EMS that see it and the one just past it,
+de-energising the **smallest** segment. Mode is **auto-isolate** or **operator-approved** (the
+confidence gate decides).
 
 **Fail-safe:** if the mesh is silent or the broker is unreachable, nothing changes — the hardware
 fault line still protects life. Degradation is graceful.
@@ -213,11 +227,17 @@ Two distinct problems:
      **alert-only** over auto-isolation until phase angle is available;
    - this is exactly the case where **phase-angle tracking** resolves the ambiguity.
 
-**Prior art supports this exactly.** Established practice for *faulty-feeder selection* declares a
-feeder faulted when the **phase angle between residual voltage and residual current is close to 90°**
-— i.e. direction discrimination is a **phase-angle** problem, not a magnitude problem. Magnitude
-ranking (what we can do today) is therefore a **usable approximation**, and phase angle is the
-principled fix. This is strong support for Glenn's remark that IVY could upgrade the Modbus RCM.
+**Prior art supports this exactly — with a concrete criterion.** Established faulty-feeder selection
+declares a feeder faulted when **|∠V_res − ∠I_res − 90°| < Δθ** (Δθ = a small tolerance). The lead/lag
+even gives **direction**:
+
+- **non-faulted** feeder: I_res *leads* V_res by ~90°; **faulted**: I_res *lags* V_res by ~90°;
+- **downstream** of the fault: V_res *leads* I_res by ~90°; **upstream**: V_res *lags* I_res.
+
+So direction isolation is fundamentally a **phase-angle** problem, not a magnitude one. Magnitude +
+correlation ranking (what we can do today, §6) is a **usable approximation**; the phase angle is the
+principled fix that also resolves the reverse-flow ambiguity. Strong support for Glenn's remark that
+IVY could upgrade the Modbus RCM. (Source: `S5_literature_findings.md`.)
 
 **Ask to IVY (Glenn is already in contact):** can the RCM report the **phase angle of the leakage
 current** (vs phase voltage / neutral current)? That single field turns magnitude-ranking into true
