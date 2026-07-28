@@ -101,6 +101,8 @@ reverse-flow-adaptive protection}
 \begin{center}\small July 2026\end{center}
 
 \end{titlepage}
+\pagenumbering{roman}
+\setcounter{page}{1}
 ```
 
 # Summary {.unnumbered}
@@ -124,6 +126,8 @@ progress never stalls on an unknown, then confirm each assumption on real hardwa
 \newpage
 \tableofcontents
 \newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
 ```
 
 # Nomenclature {.unnumbered}

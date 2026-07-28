@@ -23,12 +23,11 @@ box(2,37,26,10,"ems-01 (self)","AC 45 mA  rising",edge=NOM,tcol=NOM)
 box(2,23,26,10,"ems-04 (peer)","AC 18 mA",edge=PEER,tcol=PEER)
 box(2,9,26,10,"ems-01far (peer)","AC 4.5 mA",edge=PEER,tcol=PEER)
 
-# nomination
-box(37,20,30,17,"Nomination round","rank by magnitude\n+ min peer-correlation\n(odd-one-out)")
-# fix multiline sub manually
-ax.text(52,30.5,"rank by magnitude",ha="center",fontsize=7.7,color=MUT)
-ax.text(52,27.5,"+ min peer-correlation",ha="center",fontsize=7.7,color=MUT)
-ax.text(52,24.5,"(odd-one-out)",ha="center",fontsize=7.7,color=MUT)
+# nomination (title only; sub-lines drawn manually below to control spacing)
+box(37,20,30,17,"Nomination round")
+ax.text(52,30.0,"rank by magnitude",ha="center",fontsize=7.7,color=MUT)
+ax.text(52,27.0,"+ min peer-correlation",ha="center",fontsize=7.7,color=MUT)
+ax.text(52,24.0,"(odd-one-out)",ha="center",fontsize=7.7,color=MUT)
 
 # gate
 box(74,29,24,10,"confidence gate",">= 0.30 & quorum",edge=ACC,tcol=ACC)
@@ -44,7 +43,7 @@ arrow(86,29,86,24,OK)      # gate -> isolate
 ax.text(88.5,26.5,"conf 0.82",ha="left",fontsize=7.6,color=OK)
 arrow(80,15,80,11,MUT)     # (else) -> alert
 
-ax.text(50,52.5,"S5 nomination — magnitude + peer-correlation, confidence-gated (literature-grounded)",
+ax.text(50,52.5,"S5 nomination: magnitude + peer-correlation, confidence-gated (literature-grounded)",
         ha="center",fontsize=9.4,color=INK)
 plt.tight_layout()
 out=os.path.join(os.path.dirname(__file__),"s5_nomination.png")

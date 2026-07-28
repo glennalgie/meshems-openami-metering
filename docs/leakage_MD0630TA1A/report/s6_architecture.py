@@ -42,7 +42,7 @@ ax.text(64,15,"3.3 V in",ha="left",fontsize=7.2,color=MUT)
 # meter feed into B
 ax.text(50,39,"meter active_power  (import / export)",ha="center",fontsize=7.4,color=MUT)
 
-ax.text(50,58.5,"S6 — hardware alarm sense (A) + reverse-power-flow adaptive threshold (B)",
+ax.text(50,58.5,"S6: hardware alarm sense (A) + reverse-power-flow adaptive threshold (B)",
         ha="center",fontsize=9.6,color=INK)
 plt.tight_layout()
 out=os.path.join(os.path.dirname(__file__),"s6_architecture.png")
