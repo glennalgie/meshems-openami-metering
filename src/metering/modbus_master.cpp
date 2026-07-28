@@ -99,7 +99,11 @@ HardwareSerial _modbus1(1);                       // HW519 RS-485 transceiver
 Modbus_SHT20   sht20;                             // temperature/humidity sensor
 
 #if defined(ENABLE_LEAKAGE_MD0630)
-Modbus_MD0630  md0630;                            // AC+DC residual-current monitor
+#if defined(LEAKAGE_MOCK)
+Modbus_MD0630_Mock md0630;                        // AC+DC residual-current monitor (mock: synthesised ramp)
+#else
+Modbus_MD0630      md0630;                         // AC+DC residual-current monitor (real device)
+#endif
 LeakageModel   leakageModel;                      // published on subpanel_RCMleaks
 EnergyRing<CURRENT_HISTORY_SIZE> energyRing;      // S4: recent energy snapshots (128)
 LeakageInsightsCache leakageInsights;             // S4: leakage steps ↔ energy events
@@ -171,7 +175,7 @@ static void setup_md0630() {
                   MD0630_ALARM_AC_PIN, MD0630_ALARM_DC_PIN, MD0630_ALARM_FAULT_PIN);
 #endif
 #if defined(LEAKAGE_MOCK)
-    md0630.setMockRamp(0.0f, 0.5f, 45.0f,    // AC: 0 -> 45 mA at 0.5 mA/s  (crosses 30 mA at ~60 s)
+    md0630.setRampData(0.0f, 0.5f, 45.0f,    // AC: 0 -> 45 mA at 0.5 mA/s  (crosses 30 mA at ~60 s)
                        0.0f, 0.1f,  9.0f);   // DC: 0 ->  9 mA at 0.1 mA/s  (crosses  6 mA at ~60 s)
     Serial.println("SETUP: MODBUS: MD0630 in MOCK RAMP mode — no hardware required");
 #endif

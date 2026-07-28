@@ -32,7 +32,7 @@
 class Modbus_MD0630 : public ModbusMaster {
   public:
     Modbus_MD0630();
-    ~Modbus_MD0630() {};
+    virtual ~Modbus_MD0630() {};
 
     // ===================================================================
     // 1. Function code — "holding or input registers reads" (Glenn)
@@ -62,22 +62,15 @@ class Modbus_MD0630 : public ModbusMaster {
     float  ma_scale = 0.1f;             // raw register value -> mA (Glenn spec: 1 unit = 0.1 mA)
 
     // ===================================================================
-    // 3. Mock mode — "proceed with mock reads for now" (Glenn)
-    //    Runs the full pipeline with no hardware. MOCK_RAMP = test bench for
-    //    the leakage-isolation schema (simulated rising leakage per phase).
+    // 3. Mock: the base class holds NO mock code/data. The mock lives in the
+    //    Modbus_MD0630_Mock sub-class below, which overrides poll() to
+    //    synthesise leakage (Doug's suggestion; keeps this class device-only).
     // ===================================================================
-    enum MockMode : uint8_t { MOCK_OFF, MOCK_STEADY, MOCK_RAMP };
-    void     setMock(MockMode m) { mock = m; }
-    MockMode getMock() const     { return mock; }
-    void     setMockSteady(float ac_mA_, float dc_mA_);
-    // ramp: start value, climb rate (mA/s) and ceiling for each channel
-    void     setMockRamp(float ac_start, float ac_rate, float ac_ceil,
-                         float dc_start, float dc_rate, float dc_ceil);
 
     // ===================================================================
     // 4. Poll (real or mock) + safe register probe
     // ===================================================================
-    uint8_t  poll();                       // read AC + DC leakage; 0 (ku8MBSuccess) = OK
+    virtual uint8_t poll();                // read AC + DC leakage; 0 (ku8MBSuccess) = OK  (mock overrides)
     void     probeRegisters();             // SAFE reads (FC04 then FC03) before any write
 
     uint8_t  get_modbus_address();
@@ -118,24 +111,59 @@ class Modbus_MD0630 : public ModbusMaster {
     uint16_t getFailCount();
     uint16_t getSuccessCount();
 
+  protected:
+    // Shared telemetry state. Written by the real poll() here, or by a mock
+    // subclass's poll() override (Modbus_MD0630_Mock) which injects synthesised
+    // readings. Protected so no mock code has to live in this base class.
+    float    ac_mA;
+    float    dc_mA;
+    uint16_t success_count;
+    unsigned long timestamp_last_report;
+
   private:
     uint8_t  read_regs(uint16_t addr, uint8_t count);  // dispatch to FC03 or FC04
     uint8_t  unlock();                                  // optional pre-write unlock (S3)
     uint8_t  poll_real();
-    uint8_t  poll_mock();
 
     ReadFC   read_fc;
-    MockMode mock;
-    // mock ramp state
-    float    mock_ac, mock_ac_rate, mock_ac_ceil;
-    float    mock_dc, mock_dc_rate, mock_dc_ceil;
-    unsigned long mock_last_ms;
-
     uint8_t  modbus_address;
-    float    ac_mA;
-    float    dc_mA;
-    unsigned long timestamp_last_report;
     unsigned long timestamp_last_failure;
     uint16_t fail_count;
-    uint16_t success_count;
+};
+
+// ---------------------------------------------------------------------------
+// Mock sub-class (Doug's suggestion). The base class above holds no mock
+// code/data; this sub-class overrides poll() to synthesise leakage. The
+// constructor seeds a rising ramp that crosses the life-safety thresholds
+// (AC 30 / DC 6 mA) at ~60 s, so it produces data out of the box. Extend here
+// for special testable behaviours (e.g. inject spikes / random events).
+// ---------------------------------------------------------------------------
+class Modbus_MD0630_Mock : public Modbus_MD0630 {
+  public:
+    enum MockMode : uint8_t { MOCK_STEADY, MOCK_RAMP };
+
+    Modbus_MD0630_Mock() {
+        setRampData(0.0f, 0.5f, 45.0f,    // AC: 0 -> 45 mA @ 0.5 mA/s
+                    0.0f, 0.1f,  9.0f);    // DC: 0 ->  9 mA @ 0.1 mA/s
+    }
+
+    // Repopulate this mock directly (thin, mock-only entry points).
+    void setSteadyData(float ac_mA_, float dc_mA_) {
+        mock_ac = ac_mA_; mock_dc = dc_mA_; mode_ = MOCK_STEADY;
+    }
+    void setRampData(float ac_start, float ac_rate, float ac_ceil,
+                     float dc_start, float dc_rate, float dc_ceil) {
+        mock_ac = ac_start; mock_ac_rate = ac_rate; mock_ac_ceil = ac_ceil;
+        mock_dc = dc_start; mock_dc_rate = dc_rate; mock_dc_ceil = dc_ceil;
+        mock_last_ms = 0;                 // 0 => first poll() starts the ramp clock
+        mode_ = MOCK_RAMP;
+    }
+
+    uint8_t poll() override;              // synthesise leakage (defined in the .cpp)
+
+  private:
+    MockMode      mode_        = MOCK_RAMP;
+    float         mock_ac = 0, mock_ac_rate = 0, mock_ac_ceil = 0;
+    float         mock_dc = 0, mock_dc_rate = 0, mock_dc_ceil = 0;
+    unsigned long mock_last_ms = 0;
 };

@@ -24,11 +24,6 @@ static const char* mbErrStr(uint8_t err) {
 
 Modbus_MD0630::Modbus_MD0630() {
     read_fc                = FC_HOLDING; // confirmed: CT.exe uses FC03 (FC04 also answers)
-    mock                   = MOCK_OFF;
-    mock_ac = mock_dc      = 0.0f;
-    mock_ac_rate = mock_dc_rate = 0.0f;
-    mock_ac_ceil = mock_dc_ceil = 0.0f;
-    mock_last_ms           = 0;
     modbus_address         = 1;          // datasheet factory default slave ID 0x01
     ac_mA                  = 0.0f;
     dc_mA                  = 0.0f;
@@ -51,24 +46,11 @@ uint8_t Modbus_MD0630::read_regs(uint16_t addr, uint8_t count) {
     return readInputRegisters(addr, count);
 }
 
-// ---- mock configuration --------------------------------------------------
-void Modbus_MD0630::setMockSteady(float ac_mA_, float dc_mA_) {
-    mock_ac = ac_mA_;
-    mock_dc = dc_mA_;
-    mock    = MOCK_STEADY;
-}
-
-void Modbus_MD0630::setMockRamp(float ac_start, float ac_rate, float ac_ceil,
-                                float dc_start, float dc_rate, float dc_ceil) {
-    mock_ac = ac_start; mock_ac_rate = ac_rate; mock_ac_ceil = ac_ceil;
-    mock_dc = dc_start; mock_dc_rate = dc_rate; mock_dc_ceil = dc_ceil;
-    mock_last_ms = millis();
-    mock = MOCK_RAMP;
-}
-
 // ---- poll ----------------------------------------------------------------
+// Base class does the REAL read only (no mock code here). The mock lives in
+// Modbus_MD0630_Mock::poll() at the bottom of this file.
 uint8_t Modbus_MD0630::poll() {
-    return (mock == MOCK_OFF) ? poll_real() : poll_mock();
+    return poll_real();
 }
 
 // Real read: AC and DC leakage via the configured function code + offsets.
@@ -97,12 +79,15 @@ uint8_t Modbus_MD0630::poll_real() {
     return err;
 }
 
-// Mock read: synthesise plausible leakage so the pipeline runs with no hardware.
-// MOCK_RAMP integrates the climb rate over elapsed time (test bench for the
-// leakage-isolation schema); MOCK_STEADY holds a fixed value.
-uint8_t Modbus_MD0630::poll_mock() {
+// Mock read (Modbus_MD0630_Mock): synthesise plausible leakage so the pipeline
+// runs with no hardware. MOCK_RAMP integrates the climb rate over elapsed time
+// (test bench for the leakage-isolation schema); MOCK_STEADY holds a fixed value.
+// It writes the base class's protected telemetry fields, so the base stays
+// mock-free.
+uint8_t Modbus_MD0630_Mock::poll() {
     unsigned long nowms = millis();
-    if (mock == MOCK_RAMP) {
+    if (mock_last_ms == 0) mock_last_ms = nowms;       // first poll: start the clock
+    if (mode_ == MOCK_RAMP) {
         float dt = (nowms - mock_last_ms) / 1000.0f;   // seconds since last poll
         if (dt < 0) dt = 0;
         mock_ac += mock_ac_rate * dt;
@@ -116,7 +101,7 @@ uint8_t Modbus_MD0630::poll_mock() {
     success_count++;
     timestamp_last_report = nowms;
     Serial.printf("MD0630 [MOCK %s]: AC=%.2f mA  DC=%.2f mA  (ok:%d)\n",
-                  (mock == MOCK_RAMP ? "RAMP" : "STEADY"), ac_mA, dc_mA, success_count);
+                  (mode_ == MOCK_RAMP ? "RAMP" : "STEADY"), ac_mA, dc_mA, success_count);
     return ku8MBSuccess;
 }
 
@@ -224,7 +209,11 @@ void Modbus_MD0630::probeRegisters() {
    #include <metering/modbus_md0630.h>
    #include <metering/leakage_model_ivy41a.h>
 
-   Modbus_MD0630 md0630;
+   #if defined(LEAKAGE_MOCK)
+   Modbus_MD0630_Mock md0630;   // mock: poll() returns a synthesised ramp
+   #else
+   Modbus_MD0630      md0630;    // real device
+   #endif
    LeakageModel  leakageModel;
    #define MD0630_ADDR 100            // Glenn's node numbering (100/101/102 per phase)
 
@@ -235,8 +224,9 @@ void Modbus_MD0630::probeRegisters() {
    leakageModel.dc.threshold_mA           = Modbus_MD0630::DC_THRESHOLD_MA;  //  6 mA (Type B)
 
    // --- choose ONE path of least blockage ---
-   // (a) NO hardware yet -> mock a rising leakage to exercise the whole pipeline:
-   md0630.setMockRamp(/ac/ 0, 2.0f, 45.0f,   /dc/ 0, 0.4f, 9.0f);  // mA/s, ceilings
+   // (a) NO hardware yet -> use Modbus_MD0630_Mock (constructor already seeds a
+   //     ramp; call setRampData() only to override it):
+   md0630.setRampData(/ac/ 0, 2.0f, 45.0f,   /dc/ 0, 0.4f, 9.0f);  // mock only; mA/s, ceilings
    // (b) real module attached -> confirm the map ONCE, then read live:
    // md0630.probeRegisters();                 // safe reads, prints FC03/FC04 + words
    // md0630.setReadFunction(Modbus_MD0630::FC_INPUT);   // or FC_HOLDING
