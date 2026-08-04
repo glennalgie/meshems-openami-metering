@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Montage — Test de fuite DC (échelle de résistances)</title>
+<style>
+  :root{
+    --ink:#14242b; --sub:#3a4a52; --blue:#123a5a; --green:#1f8a4c;
+    --orange:#c05a12; --grey:#5b6d74; --line:#c9d3d5; --soft:#f4f7f7; --bg:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       line-height:1.5;padding:28px 18px}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{color:var(--blue);font-size:1.55rem;margin:0 0 4px}
+  h2{color:var(--blue);font-size:1.15rem;margin:26px 0 8px;border-bottom:2px solid var(--line);padding-bottom:4px}
+  .lead{color:var(--sub);margin:0 0 6px}
+  .fig{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px;margin:16px 0;overflow-x:auto}
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  table{border-collapse:collapse;width:100%;margin:8px 0;font-size:.95rem}
+  th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  thead th{border-top:2px solid var(--blue);border-bottom:1px solid var(--blue);color:var(--blue)}
+  tbody tr:last-child td{border-bottom:2px solid var(--blue)}
+  .yes{color:var(--orange);font-weight:700}
+  .no{color:var(--grey)}
+  .note{background:var(--soft);border-left:4px solid var(--green);border-radius:6px;padding:10px 14px;margin:12px 0}
+  .warn{background:#fff5ee;border-left:4px solid var(--orange);border-radius:6px;padding:10px 14px;margin:12px 0}
+  code{background:#eef3f3;padding:1px 5px;border-radius:4px;font-size:.9em}
+  ol,ul{margin:6px 0 6px 20px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;color:var(--sub);font-size:.9rem;margin-top:6px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:22px;height:12px;border:2px solid var(--blue);border-radius:2px;display:inline-block}
+  .rz{width:26px;height:12px;background:#eef3f3;border:1.5px solid var(--grey);display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Émulateur de fuite DC — montage de test</h1>
+  <p class="lead">Injecter un courant de fuite <b>DC connu</b> (3,3&nbsp;V de l'EMS) à travers le CT IVY,
+  pour valider la détection autour du seuil de sécurité <b>6&nbsp;mA</b>. Chaque branche ajoute son courant ; le CT lit la somme.</p>
+
+  <div class="fig">
+  <svg viewBox="0 0 900 540" role="img" aria-label="Schéma de l'échelle de résistances DC">
+    <!-- ================= EMS source ================= -->
+    <rect x="20" y="70" width="140" height="130" rx="10" fill="#f4f7f7" stroke="#123a5a" stroke-width="2"/>
+    <text x="90" y="98" text-anchor="middle" font-size="15" font-weight="700" fill="#123a5a">EMS</text>
+    <text x="90" y="118" text-anchor="middle" font-size="11" fill="#3a4a52">(ESP32-S3)</text>
+    <text x="150" y="140" text-anchor="end" font-size="12" font-weight="700" fill="#1f8a4c">3,3&nbsp;V +</text>
+    <circle cx="160" cy="140" r="4" fill="#1f8a4c"/>
+    <text x="150" y="182" text-anchor="end" font-size="12" font-weight="700" fill="#5b6d74">GND</text>
+    <circle cx="160" cy="178" r="4" fill="#5b6d74"/>
+
+    <!-- ============ 3.3V wire through the CT to NODE A ============ -->
+    <line x1="160" y1="140" x2="212" y2="140" stroke="#1f8a4c" stroke-width="2.5"/>
+    <!-- CT donut -->
+    <ellipse cx="248" cy="140" rx="26" ry="30" fill="none" stroke="#116b74" stroke-width="3.5"/>
+    <ellipse cx="248" cy="140" rx="11" ry="14" fill="none" stroke="#116b74" stroke-width="2.5"/>
+    <text x="248" y="196" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">CT IVY</text>
+    <text x="248" y="210" text-anchor="middle" font-size="10" fill="#3a4a52">1 seul fil</text>
+    <!-- wire continues -->
+    <line x1="284" y1="140" x2="360" y2="140" stroke="#1f8a4c" stroke-width="2.5"/>
+    <line x1="360" y1="140" x2="360" y2="118" stroke="#1f8a4c" stroke-width="2.5"/>
+
+    <!-- ================= NODE A rail ================= -->
+    <line x1="360" y1="118" x2="840" y2="118" stroke="#123a5a" stroke-width="3"/>
+    <text x="600" y="108" text-anchor="middle" font-size="12" font-weight="700" fill="#123a5a">NŒUD A</text>
+
+    <!-- ================= GND rail ================= -->
+    <line x1="360" y1="452" x2="840" y2="452" stroke="#5b6d74" stroke-width="3"/>
+    <text x="600" y="472" text-anchor="middle" font-size="12" font-weight="700" fill="#5b6d74">GND commun</text>
+    <!-- GND return to EMS -->
+    <line x1="360" y1="452" x2="160" y2="452" stroke="#5b6d74" stroke-width="2.5"/>
+    <line x1="160" y1="452" x2="160" y2="178" stroke="#5b6d74" stroke-width="2.5"/>
+
+    <!-- ================= 4 branches ================= -->
+    <!-- branch template drawn 4x -->
+    <!-- Branch 1  x=430 : 1,5k + 100 = 1,6k -> 2 mA -->
+    <g>
+      <line x1="430" y1="118" x2="430" y2="150" stroke="#14242b" stroke-width="2"/>
+      <circle cx="430" cy="150" r="3.5" fill="#14242b"/>
+      <line x1="430" y1="150" x2="446" y2="166" stroke="#14242b" stroke-width="2"/>
+      <circle cx="430" cy="182" r="3.5" fill="#14242b"/>
+      <text x="404" y="170" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW1</text>
+      <line x1="430" y1="182" x2="430" y2="202" stroke="#14242b" stroke-width="2"/>
+      <rect x="398" y="202" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="430" y="219" text-anchor="middle" font-size="12" fill="#14242b">1,5&nbsp;kΩ</text>
+      <line x1="430" y1="228" x2="430" y2="252" stroke="#14242b" stroke-width="2"/>
+      <rect x="398" y="252" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="430" y="269" text-anchor="middle" font-size="12" fill="#14242b">100&nbsp;Ω</text>
+      <line x1="430" y1="278" x2="430" y2="452" stroke="#14242b" stroke-width="2"/>
+      <text x="430" y="330" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">≈1,6&nbsp;kΩ</text>
+      <text x="430" y="346" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">2&nbsp;mA</text>
+    </g>
+    <!-- Branch 2  x=560 : 1k + 100 = 1,1k -> 3 mA -->
+    <g>
+      <line x1="560" y1="118" x2="560" y2="150" stroke="#14242b" stroke-width="2"/>
+      <circle cx="560" cy="150" r="3.5" fill="#14242b"/>
+      <line x1="560" y1="150" x2="576" y2="166" stroke="#14242b" stroke-width="2"/>
+      <circle cx="560" cy="182" r="3.5" fill="#14242b"/>
+      <text x="534" y="170" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW2</text>
+      <line x1="560" y1="182" x2="560" y2="202" stroke="#14242b" stroke-width="2"/>
+      <rect x="528" y="202" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="560" y="219" text-anchor="middle" font-size="12" fill="#14242b">1&nbsp;kΩ</text>
+      <line x1="560" y1="228" x2="560" y2="252" stroke="#14242b" stroke-width="2"/>
+      <rect x="528" y="252" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="560" y="269" text-anchor="middle" font-size="12" fill="#14242b">100&nbsp;Ω</text>
+      <line x1="560" y1="278" x2="560" y2="452" stroke="#14242b" stroke-width="2"/>
+      <text x="560" y="330" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">≈1,1&nbsp;kΩ</text>
+      <text x="560" y="346" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">3&nbsp;mA</text>
+    </g>
+    <!-- Branch 3  x=690 : 1,5k + 100 = 1,6k -> 2 mA -->
+    <g>
+      <line x1="690" y1="118" x2="690" y2="150" stroke="#14242b" stroke-width="2"/>
+      <circle cx="690" cy="150" r="3.5" fill="#14242b"/>
+      <line x1="690" y1="150" x2="706" y2="166" stroke="#14242b" stroke-width="2"/>
+      <circle cx="690" cy="182" r="3.5" fill="#14242b"/>
+      <text x="664" y="170" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW3</text>
+      <line x1="690" y1="182" x2="690" y2="202" stroke="#14242b" stroke-width="2"/>
+      <rect x="658" y="202" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="690" y="219" text-anchor="middle" font-size="12" fill="#14242b">1,5&nbsp;kΩ</text>
+      <line x1="690" y1="228" x2="690" y2="252" stroke="#14242b" stroke-width="2"/>
+      <rect x="658" y="252" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="690" y="269" text-anchor="middle" font-size="12" fill="#14242b">100&nbsp;Ω</text>
+      <line x1="690" y1="278" x2="690" y2="452" stroke="#14242b" stroke-width="2"/>
+      <text x="690" y="330" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">≈1,6&nbsp;kΩ</text>
+      <text x="690" y="346" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">2&nbsp;mA</text>
+    </g>
+    <!-- Branch 4  x=820 : 1k + 100 = 1,1k -> 3 mA -->
+    <g>
+      <line x1="820" y1="118" x2="820" y2="150" stroke="#14242b" stroke-width="2"/>
+      <circle cx="820" cy="150" r="3.5" fill="#14242b"/>
+      <line x1="820" y1="150" x2="836" y2="166" stroke="#14242b" stroke-width="2"/>
+      <circle cx="820" cy="182" r="3.5" fill="#14242b"/>
+      <text x="794" y="170" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW4</text>
+      <line x1="820" y1="182" x2="820" y2="202" stroke="#14242b" stroke-width="2"/>
+      <rect x="788" y="202" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="820" y="219" text-anchor="middle" font-size="12" fill="#14242b">1&nbsp;kΩ</text>
+      <line x1="820" y1="228" x2="820" y2="252" stroke="#14242b" stroke-width="2"/>
+      <rect x="788" y="252" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.5"/>
+      <text x="820" y="269" text-anchor="middle" font-size="12" fill="#14242b">100&nbsp;Ω</text>
+      <line x1="820" y1="278" x2="820" y2="452" stroke="#14242b" stroke-width="2"/>
+      <text x="820" y="330" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">≈1,1&nbsp;kΩ</text>
+      <text x="820" y="346" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">3&nbsp;mA</text>
+    </g>
+  </svg>
+  <div class="legend">
+    <span><span class="sw"></span> interrupteur (position DIP ou fil jumper)</span>
+    <span><span class="rz"></span> résistance</span>
+    <span>⟠ CT IVY (le fil traverse la fenêtre 1 fois)</span>
+  </div>
+  </div>
+
+  <h2>Comment ça marche</h2>
+  <ul>
+    <li>Un <b>seul fil</b> part du <b>3,3&nbsp;V</b>, <b>traverse le CT</b> (1 passage), puis arrive au <b>NŒUD A</b>.</li>
+    <li>Les <b>4 branches en parallèle</b> relient le NŒUD A à la <b>masse (GND)</b>. Chaque branche = résistances en série + un interrupteur.</li>
+    <li>Le CT mesure le <b>courant total</b> dans le fil unique = <b>somme des branches actives</b>.</li>
+    <li><b>Masse commune</b> : la ligne GND de la breadboard doit être reliée au GND de l'EMS.</li>
+  </ul>
+
+  <h2>Paliers (en activant les branches cumulativement)</h2>
+  <table>
+    <thead><tr><th>Interrupteurs ON</th><th>Courant total</th><th>Alarme DC (seuil 6&nbsp;mA)</th></tr></thead>
+    <tbody>
+      <tr><td>SW1</td><td>~2 mA</td><td class="no">non</td></tr>
+      <tr><td>SW1 + SW2</td><td>~5 mA</td><td class="no">non (juste sous 6)</td></tr>
+      <tr><td>SW1 + SW2 + SW3</td><td>~7 mA</td><td class="yes">OUI (dépasse 6)</td></tr>
+      <tr><td>SW1 + SW2 + SW3 + SW4</td><td>~10 mA</td><td class="yes">OUI</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Procédure de test</h2>
+  <ol>
+    <li>Monte le circuit sur la breadboard (branches en parallèle entre NŒUD A et GND).</li>
+    <li>Fais passer le fil 3,3&nbsp;V <b>une fois</b> dans la fenêtre du CT, puis vers le NŒUD A.</li>
+    <li>Relie <b>GND breadboard ↔ GND EMS</b>.</li>
+    <li>Flashe le firmware, ouvre le <b>moniteur série</b>.</li>
+    <li>Active les branches une par une&nbsp;: la <b>fuite DC affichée</b> doit grimper ~2 → 5 → 7 → 10 mA.
+        Le franchissement de <b>6&nbsp;mA</b> (entre 5 et 7) doit déclencher l'alarme DC.</li>
+  </ol>
+
+  <div class="note">
+    <b>Astuce&nbsp;:</b> la valeur exacte n'est pas critique — le module IVY <b>affiche le vrai mA</b>,
+    tu ajustes en lisant. Pas de DIP&nbsp;? Branche/débranche chaque branche <b>à la main</b> (jumper).
+  </div>
+
+  <div class="warn">
+    <b>Sécurité&nbsp;:</b> tout est en <b>3,3&nbsp;V</b> (très basse tension, courants en mA) → aucun danger.
+    Ne relie <b>jamais</b> ce montage au 5&nbsp;V ni au 12&nbsp;V.
+  </div>
+
+  <p style="color:#5b6d74;font-size:.85rem;margin-top:22px;border-top:1px solid #c9d3d5;padding-top:8px">
+    OpenAMI / MeshEMS — IVY MD0630 leakage · émulateur DC (échelle de résistances à 3,3&nbsp;V).
+    Étape complémentaire&nbsp;: test AC avec le transformateur 9&nbsp;V AC-AC (même principe).
+  </p>
+
+</div>
+</body>
+</html>

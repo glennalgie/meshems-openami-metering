@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schéma complet — banc de test DC (MD0630 ↔ ESP32)</title>
+<style>
+  :root{--ink:#14242b;--sub:#3a4a52;--blue:#123a5a;--green:#1f8a4c;--orange:#c05a12;
+        --red:#b23b2e;--modb:#1f6fb0;--grey:#5b6d74;--line:#c9d3d5;--soft:#f4f7f7;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:var(--ink);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;padding:26px 16px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{color:var(--blue);font-size:1.5rem;margin:0 0 4px}
+  h2{color:var(--blue);font-size:1.12rem;margin:24px 0 8px;border-bottom:2px solid var(--line);padding-bottom:4px}
+  .lead{color:var(--sub);margin:0 0 6px}
+  .fig{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px;margin:14px 0;overflow-x:auto}
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  table{border-collapse:collapse;width:100%;margin:8px 0;font-size:.94rem}
+  th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  thead th{border-top:2px solid var(--blue);border-bottom:1px solid var(--blue);color:var(--blue)}
+  tbody tr:last-child td{border-bottom:2px solid var(--blue)}
+  .note{background:var(--soft);border-left:4px solid var(--green);border-radius:6px;padding:10px 14px;margin:12px 0}
+  .warn{background:#fff5ee;border-left:4px solid var(--orange);border-radius:6px;padding:10px 14px;margin:12px 0}
+  code{background:#eef3f3;padding:1px 5px;border-radius:4px;font-size:.9em}
+  ol,ul{margin:6px 0 6px 20px}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;color:var(--sub);font-size:.88rem;margin-top:6px}
+  .legend b{display:inline-block;width:26px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  .pw{background:#b23b2e}.gd{background:#5b6d74}.mb{background:#1f6fb0}.al{background:#c05a12}.tv{background:#1f8a4c}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Schéma complet — banc de test DC</h1>
+  <p class="lead">Câblage complet du module <b>IVY MD0630</b> vers l'<b>ESP32-S3</b> :
+  alimentation 12&nbsp;V, communication Modbus (pour lire la fuite), lignes d'alarme, et l'<b>émulateur DC</b> qui injecte le courant de fuite dans le CT.</p>
+
+  <h2>1. Tableau de câblage (l'essentiel)</h2>
+  <table>
+    <thead><tr><th>Broche MD0630 (7 pts)</th><th>Vers</th><th>Détail</th></tr></thead>
+    <tbody>
+      <tr><td><b>VCC</b></td><td>+ 12 V (alim)</td><td>jamais l'ESP32</td></tr>
+      <tr><td><b>GND</b></td><td>− 12 V &nbsp;+&nbsp; GND ESP32</td><td>masse commune</td></tr>
+      <tr><td><b>TX</b></td><td>ESP32 <b>GPIO42</b> (RS485_1 RX)</td><td>+ pull-up <b>4,7 kΩ → 3V3</b></td></tr>
+      <tr><td><b>RX</b></td><td>ESP32 <b>GPIO7</b> (RS485_1 TX)</td><td>+ pull-up <b>4,7 kΩ → 3V3</b></td></tr>
+      <tr><td><b>AD</b></td><td>ESP32 <b>GPIO21</b></td><td>défaut / alarme (optionnel)</td></tr>
+      <tr><td><b>AO</b></td><td>ESP32 <b>GPIO39</b></td><td>alarme AC · + <b>4,7 kΩ en série</b></td></tr>
+      <tr><td><b>DO</b></td><td>ESP32 <b>GPIO40</b></td><td>alarme DC · + <b>4,7 kΩ en série</b></td></tr>
+      <tr><td><b>CT (fenêtre)</b></td><td>émulateur DC</td><td>3V3 → fil dans le CT → échelle résistances → GND</td></tr>
+    </tbody>
+  </table>
+
+  <h2>2. Schéma d'ensemble : MD0630 ↔ ESP32</h2>
+  <div class="fig">
+  <svg viewBox="0 0 960 440" role="img" aria-label="Câblage module vers ESP32">
+    <!-- PSU -->
+    <rect x="30" y="44" width="150" height="82" rx="9" fill="#f4f7f7" stroke="#b23b2e" stroke-width="2"/>
+    <text x="105" y="72" text-anchor="middle" font-size="14" font-weight="700" fill="#b23b2e">Alim 12 V</text>
+    <text x="168" y="98" text-anchor="end" font-size="12" font-weight="700" fill="#b23b2e">+12 V</text>
+    <circle cx="180" cy="98" r="4" fill="#b23b2e"/>
+    <text x="168" y="120" text-anchor="end" font-size="12" font-weight="700" fill="#5b6d74">GND −</text>
+    <circle cx="180" cy="116" r="4" fill="#5b6d74"/>
+
+    <!-- MD0630 -->
+    <rect x="370" y="50" width="200" height="330" rx="10" fill="#f4f7f7" stroke="#116b74" stroke-width="2.5"/>
+    <text x="470" y="76" text-anchor="middle" font-size="15" font-weight="700" fill="#116b74">IVY MD0630</text>
+    <text x="470" y="92" text-anchor="middle" font-size="10.5" fill="#3a4a52">connecteur 7 broches</text>
+    <!-- left pins -->
+    <circle cx="370" cy="120" r="4" fill="#b23b2e"/><text x="384" y="124" font-size="12" font-weight="700" fill="#14242b">VCC</text>
+    <circle cx="370" cy="160" r="4" fill="#5b6d74"/><text x="384" y="164" font-size="12" font-weight="700" fill="#14242b">GND</text>
+    <!-- right pins -->
+    <circle cx="570" cy="120" r="4" fill="#1f6fb0"/><text x="556" y="124" text-anchor="end" font-size="12" font-weight="700" fill="#14242b">TX</text>
+    <circle cx="570" cy="160" r="4" fill="#1f6fb0"/><text x="556" y="164" text-anchor="end" font-size="12" font-weight="700" fill="#14242b">RX</text>
+    <circle cx="570" cy="235" r="4" fill="#c05a12"/><text x="556" y="239" text-anchor="end" font-size="12" font-weight="700" fill="#14242b">AD</text>
+    <circle cx="570" cy="275" r="4" fill="#c05a12"/><text x="556" y="279" text-anchor="end" font-size="12" font-weight="700" fill="#14242b">AO</text>
+    <circle cx="570" cy="315" r="4" fill="#c05a12"/><text x="556" y="319" text-anchor="end" font-size="12" font-weight="700" fill="#14242b">DO</text>
+
+    <!-- ESP32 -->
+    <rect x="775" y="50" width="160" height="345" rx="10" fill="#f4f7f7" stroke="#123a5a" stroke-width="2.5"/>
+    <text x="855" y="74" text-anchor="middle" font-size="15" font-weight="700" fill="#123a5a">ESP32-S3</text>
+    <circle cx="775" cy="100" r="4" fill="#1f8a4c"/><text x="789" y="104" font-size="11.5" font-weight="700" fill="#14242b">3V3</text>
+    <circle cx="775" cy="135" r="4" fill="#5b6d74"/><text x="789" y="139" font-size="11.5" font-weight="700" fill="#14242b">GND</text>
+    <circle cx="775" cy="180" r="4" fill="#1f6fb0"/><text x="789" y="184" font-size="11.5" font-weight="700" fill="#14242b">GPIO42</text>
+    <circle cx="775" cy="215" r="4" fill="#1f6fb0"/><text x="789" y="219" font-size="11.5" font-weight="700" fill="#14242b">GPIO7</text>
+    <circle cx="775" cy="285" r="4" fill="#c05a12"/><text x="789" y="289" font-size="11.5" font-weight="700" fill="#14242b">GPIO39</text>
+    <circle cx="775" cy="320" r="4" fill="#c05a12"/><text x="789" y="324" font-size="11.5" font-weight="700" fill="#14242b">GPIO40</text>
+    <circle cx="775" cy="355" r="4" fill="#c05a12"/><text x="789" y="359" font-size="11.5" font-weight="700" fill="#14242b">GPIO21</text>
+
+    <!-- POWER wire red -->
+    <polyline points="180,98 290,98 290,120 370,120" fill="none" stroke="#b23b2e" stroke-width="2.5"/>
+    <text x="300" y="90" font-size="11" font-weight="700" fill="#b23b2e">12 V</text>
+
+    <!-- GND common bus grey -->
+    <polyline points="180,116 180,412 745,412 745,135 775,135" fill="none" stroke="#5b6d74" stroke-width="2.5"/>
+    <polyline points="370,160 340,160 340,412" fill="none" stroke="#5b6d74" stroke-width="2.5"/>
+    <text x="470" y="428" text-anchor="middle" font-size="11.5" font-weight="700" fill="#5b6d74">GND commun (masse commune)</text>
+
+    <!-- Modbus blue -->
+    <polyline points="570,120 655,120 655,180 775,180" fill="none" stroke="#1f6fb0" stroke-width="2.5"/>
+    <polyline points="570,160 685,160 685,215 775,215" fill="none" stroke="#1f6fb0" stroke-width="2.5"/>
+    <!-- pull-ups to 3V3 -->
+    <line x1="655" y1="120" x2="655" y2="98" stroke="#1f8a4c" stroke-width="2"/>
+    <rect x="647" y="82" width="16" height="16" rx="2" fill="#eef3f3" stroke="#1f8a4c" stroke-width="1.4"/>
+    <line x1="685" y1="160" x2="685" y2="98" stroke="#1f8a4c" stroke-width="2"/>
+    <rect x="677" y="82" width="16" height="16" rx="2" fill="#eef3f3" stroke="#1f8a4c" stroke-width="1.4"/>
+    <line x1="655" y1="82" x2="700" y2="82" stroke="#1f8a4c" stroke-width="2"/>
+    <line x1="700" y1="82" x2="700" y2="100" stroke="#1f8a4c" stroke-width="2"/>
+    <line x1="700" y1="100" x2="775" y2="100" stroke="#1f8a4c" stroke-width="2"/>
+    <text x="712" y="76" font-size="10.5" font-weight="700" fill="#1f8a4c">pull-ups 4,7k → 3V3</text>
+
+    <!-- Alarm orange with 4.7k series on AO/DO -->
+    <!-- AD -> GPIO21 -->
+    <polyline points="570,235 720,235 720,355 775,355" fill="none" stroke="#c05a12" stroke-width="2.2"/>
+    <!-- AO -> 4.7k -> GPIO39 -->
+    <line x1="570" y1="275" x2="628" y2="275" stroke="#c05a12" stroke-width="2.2"/>
+    <rect x="628" y="266" width="34" height="18" rx="3" fill="#fff" stroke="#c05a12" stroke-width="1.4"/>
+    <text x="645" y="279" text-anchor="middle" font-size="9.5" fill="#c05a12">4,7k</text>
+    <polyline points="662,275 700,275 700,285 775,285" fill="none" stroke="#c05a12" stroke-width="2.2"/>
+    <!-- DO -> 4.7k -> GPIO40 -->
+    <line x1="570" y1="315" x2="628" y2="315" stroke="#c05a12" stroke-width="2.2"/>
+    <rect x="628" y="306" width="34" height="18" rx="3" fill="#fff" stroke="#c05a12" stroke-width="1.4"/>
+    <text x="645" y="319" text-anchor="middle" font-size="9.5" fill="#c05a12">4,7k</text>
+    <polyline points="662,315 710,315 710,320 775,320" fill="none" stroke="#c05a12" stroke-width="2.2"/>
+
+    <!-- 3V3 to DC emulator note -->
+    <line x1="775" y1="100" x2="775" y2="100" stroke="#1f8a4c"/>
+    <text x="855" y="410" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1f8a4c">3V3 → émulateur DC (schéma 3)</text>
+  </svg>
+  <div class="legend">
+    <span><b class="pw"></b>12 V (alim)</span>
+    <span><b class="gd"></b>GND commun</span>
+    <span><b class="mb"></b>Modbus TX/RX</span>
+    <span><b class="al"></b>alarme AO/DO/AD</span>
+    <span><b class="tv"></b>3V3 (pull-ups + émulateur)</span>
+  </div>
+  </div>
+
+  <div class="note"><b>Le module se lit par Modbus (TX/RX)</b> — c'est ce qui te permet de voir la fuite DC augmenter sur le moniteur série. Les lignes d'alarme (AO/DO/AD) sont <b>optionnelles</b> pour ce test DC (utiles pour S6-A) — tu peux les laisser pour plus tard.</div>
+
+  <h2>3. Émulateur DC (injection dans le CT)</h2>
+  <p class="lead">Le <b>3,3 V</b> de l'ESP32 traverse le CT via un fil, puis une échelle de résistances vers GND. Le CT lit la somme.</p>
+  <div class="fig">
+  <svg viewBox="0 0 900 500" role="img" aria-label="Émulateur DC">
+    <!-- 3V3 source tag -->
+    <rect x="20" y="90" width="150" height="70" rx="9" fill="#f4f7f7" stroke="#1f8a4c" stroke-width="2"/>
+    <text x="95" y="120" text-anchor="middle" font-size="13" font-weight="700" fill="#1f8a4c">ESP32 3,3 V +</text>
+    <text x="95" y="140" text-anchor="middle" font-size="10.5" fill="#3a4a52">(et GND commun)</text>
+    <circle cx="170" cy="125" r="4" fill="#1f8a4c"/>
+    <line x1="170" y1="125" x2="214" y2="125" stroke="#1f8a4c" stroke-width="2.5"/>
+    <!-- CT -->
+    <ellipse cx="250" cy="125" rx="26" ry="30" fill="none" stroke="#116b74" stroke-width="3.5"/>
+    <ellipse cx="250" cy="125" rx="11" ry="14" fill="none" stroke="#116b74" stroke-width="2.5"/>
+    <text x="250" y="182" text-anchor="middle" font-size="11" font-weight="700" fill="#116b74">CT IVY · 1 fil</text>
+    <line x1="286" y1="125" x2="360" y2="125" stroke="#1f8a4c" stroke-width="2.5"/>
+    <line x1="360" y1="125" x2="360" y2="105" stroke="#1f8a4c" stroke-width="2.5"/>
+    <!-- NODE A rail -->
+    <line x1="360" y1="105" x2="850" y2="105" stroke="#123a5a" stroke-width="3"/>
+    <text x="600" y="96" text-anchor="middle" font-size="12" font-weight="700" fill="#123a5a">NŒUD A</text>
+    <!-- GND rail -->
+    <line x1="360" y1="440" x2="850" y2="440" stroke="#5b6d74" stroke-width="3"/>
+    <text x="600" y="460" text-anchor="middle" font-size="12" font-weight="700" fill="#5b6d74">GND commun</text>
+    <polyline points="360,440 150,440 150,160" fill="none" stroke="#5b6d74" stroke-width="2.5"/>
+
+    <!-- 4 branches -->
+    <g font-size="12" fill="#14242b">
+      <!-- b1 x=430 1,5k+100 ->2mA -->
+      <line x1="430" y1="105" x2="430" y2="138" stroke="#14242b" stroke-width="2"/>
+      <circle cx="430" cy="138" r="3.5"/><line x1="430" y1="138" x2="446" y2="154" stroke="#14242b" stroke-width="2"/><circle cx="430" cy="170" r="3.5"/>
+      <text x="404" y="158" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW1</text>
+      <line x1="430" y1="170" x2="430" y2="190" stroke="#14242b" stroke-width="2"/>
+      <rect x="398" y="190" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="430" y="207" text-anchor="middle">1,5&nbsp;kΩ</text>
+      <line x1="430" y1="216" x2="430" y2="240" stroke="#14242b" stroke-width="2"/>
+      <rect x="398" y="240" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="430" y="257" text-anchor="middle">100&nbsp;Ω</text>
+      <line x1="430" y1="266" x2="430" y2="440" stroke="#14242b" stroke-width="2"/>
+      <text x="430" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">2&nbsp;mA</text>
+      <!-- b2 x=560 1k+100 ->3mA -->
+      <line x1="560" y1="105" x2="560" y2="138" stroke="#14242b" stroke-width="2"/>
+      <circle cx="560" cy="138" r="3.5"/><line x1="560" y1="138" x2="576" y2="154" stroke="#14242b" stroke-width="2"/><circle cx="560" cy="170" r="3.5"/>
+      <text x="534" y="158" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW2</text>
+      <line x1="560" y1="170" x2="560" y2="190" stroke="#14242b" stroke-width="2"/>
+      <rect x="528" y="190" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="560" y="207" text-anchor="middle">1&nbsp;kΩ</text>
+      <line x1="560" y1="216" x2="560" y2="240" stroke="#14242b" stroke-width="2"/>
+      <rect x="528" y="240" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="560" y="257" text-anchor="middle">100&nbsp;Ω</text>
+      <line x1="560" y1="266" x2="560" y2="440" stroke="#14242b" stroke-width="2"/>
+      <text x="560" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">3&nbsp;mA</text>
+      <!-- b3 x=690 1,5k+100 -->
+      <line x1="690" y1="105" x2="690" y2="138" stroke="#14242b" stroke-width="2"/>
+      <circle cx="690" cy="138" r="3.5"/><line x1="690" y1="138" x2="706" y2="154" stroke="#14242b" stroke-width="2"/><circle cx="690" cy="170" r="3.5"/>
+      <text x="664" y="158" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW3</text>
+      <line x1="690" y1="170" x2="690" y2="190" stroke="#14242b" stroke-width="2"/>
+      <rect x="658" y="190" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="690" y="207" text-anchor="middle">1,5&nbsp;kΩ</text>
+      <line x1="690" y1="216" x2="690" y2="240" stroke="#14242b" stroke-width="2"/>
+      <rect x="658" y="240" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="690" y="257" text-anchor="middle">100&nbsp;Ω</text>
+      <line x1="690" y1="266" x2="690" y2="440" stroke="#14242b" stroke-width="2"/>
+      <text x="690" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">2&nbsp;mA</text>
+      <!-- b4 x=820 1k+100 -->
+      <line x1="820" y1="105" x2="820" y2="138" stroke="#14242b" stroke-width="2"/>
+      <circle cx="820" cy="138" r="3.5"/><line x1="820" y1="138" x2="836" y2="154" stroke="#14242b" stroke-width="2"/><circle cx="820" cy="170" r="3.5"/>
+      <text x="794" y="158" text-anchor="end" font-size="11" font-weight="700" fill="#123a5a">SW4</text>
+      <line x1="820" y1="170" x2="820" y2="190" stroke="#14242b" stroke-width="2"/>
+      <rect x="788" y="190" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="820" y="207" text-anchor="middle">1&nbsp;kΩ</text>
+      <line x1="820" y1="216" x2="820" y2="240" stroke="#14242b" stroke-width="2"/>
+      <rect x="788" y="240" width="64" height="26" rx="4" fill="#eef3f3" stroke="#5b6d74" stroke-width="1.4"/><text x="820" y="257" text-anchor="middle">100&nbsp;Ω</text>
+      <line x1="820" y1="266" x2="820" y2="440" stroke="#14242b" stroke-width="2"/>
+      <text x="820" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#1f8a4c">3&nbsp;mA</text>
+    </g>
+  </svg>
+  </div>
+
+  <h2>4. Paliers &amp; test</h2>
+  <table>
+    <thead><tr><th>Interrupteurs ON</th><th>Courant total</th><th>Alarme DC (6&nbsp;mA)</th></tr></thead>
+    <tbody>
+      <tr><td>SW1</td><td>~2 mA</td><td style="color:#5b6d74">non</td></tr>
+      <tr><td>SW1 + SW2</td><td>~5 mA</td><td style="color:#5b6d74">non</td></tr>
+      <tr><td>SW1 + SW2 + SW3</td><td>~7 mA</td><td style="color:#c05a12;font-weight:700">OUI</td></tr>
+      <tr><td>tous</td><td>~10 mA</td><td style="color:#c05a12;font-weight:700">OUI</td></tr>
+    </tbody>
+  </table>
+  <ol>
+    <li>Câble alim 12 V + Modbus (TX/RX + pull-ups) + masse commune, comme au schéma 2.</li>
+    <li>Monte l'émulateur DC : <b>un seul fil</b> du 3,3 V traverse le CT, puis l'échelle vers GND.</li>
+    <li>Flashe, ouvre le <b>moniteur série</b> : la <b>fuite DC</b> doit grimper 2 → 5 → 7 → 10 mA en activant les branches ; passage de 6 mA = alarme DC.</li>
+  </ol>
+
+  <div class="warn"><b>Sécurité :</b> le module est alimenté par son <b>12 V</b> (ne le mets jamais sur l'ESP32). L'émulateur DC est en <b>3,3 V</b> (aucun danger). Les pull-ups Modbus et les 4,7 kΩ d'alarme vont vers <b>3V3</b>, jamais 5 V.</div>
+
+  <p style="color:#5b6d74;font-size:.85rem;margin-top:20px;border-top:1px solid #c9d3d5;padding-top:8px">
+    OpenAMI / MeshEMS — IVY MD0630 · schéma complet du banc de test DC. Le test AC (transfo 9 V AC-AC) suit le même principe d'émulateur.</p>
+
+</div>
+</body>
+</html>

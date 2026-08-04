@@ -64,8 +64,8 @@ uint8_t Modbus_MD0630::poll_real() {
     if (rAc == ku8MBSuccess && rDc == ku8MBSuccess) {
         success_count++;
         timestamp_last_report = millis();
-        ac_mA = acRaw * ma_scale;
-        dc_mA = dcRaw * ma_scale;
+        ac_mA = acRaw * leak_scale;   // leakage current: x0.01 mA (bench-confirmed 2026-08-04)
+        dc_mA = dcRaw * leak_scale;
         Serial.printf("MD0630 [addr:%d fc:0x%02X]: AC=%.2f mA  DC=%.2f mA  (ok:%d fail:%d)\n",
                       modbus_address, read_fc, ac_mA, dc_mA, success_count, fail_count);
         return ku8MBSuccess;

@@ -46,20 +46,26 @@ class Modbus_MD0630 : public ModbusMaster {
     //    Defaults from the Preliminary Modbus Dev Spec. Overwrite any field
     //    once the real offsets are known (probeRegisters() / IVY protocol doc).
     // ===================================================================
-    // *** CONFIRMED 2026-07-20 by live device + IVY CT.exe frames (FC03, x0.1 mA) ***
+    // *** CONFIRMED 2026-07-20 by live device + IVY CT.exe frames (FC03) ***
     // CT.exe reads 3 groups: 0x0000..0x0005, 0x0100, 0x0110..0x0111.
+    // *** CONFIRMED 2026-08-04 by DC resistor-ladder bench (Glenn's emulator): ***
+    //   - DC/AC map confirmed: a known DC leak moves 0x0000 while 0x0001 stays 0
+    //     -> DC = 0x0000, AC = 0x0001.
+    //   - LEAKAGE-CURRENT registers are x0.01 mA (NOT x0.1): injecting 5.06 / 7.13 /
+    //     10.13 mA read raw 513 / 719 / 1018 (raw x 0.01 = 5.13 / 7.19 / 10.18 mA,
+    //     ~1% match over 3 points, all within the 2-15 mA sensor range).
+    //   - THRESHOLD registers stay x0.1 mA (CT.exe frames: 003C=6.0 mA, 012C=30.0 mA).
     struct RegMap {
-        uint16_t dc_leakage = 0x0000;   // R    DC leakage current  (x0.1 mA)
-        uint16_t ac_leakage = 0x0001;   // R    AC leakage current  (x0.1 mA)
+        uint16_t dc_leakage = 0x0000;   // R    DC leakage current  (x0.01 mA)  [bench-confirmed]
+        uint16_t ac_leakage = 0x0001;   // R    AC leakage current  (x0.01 mA)  [bench-confirmed]
         uint16_t dc_thresh  = 0x0002;   // R/W  DC alarm threshold  (x0.1 mA, default  60 =  6.0 mA)
         uint16_t ac_thresh  = 0x0003;   // R/W  AC alarm threshold  (x0.1 mA, default 300 = 30.0 mA)
         uint16_t version    = 0x0100;   // R    firmware version     (read 1 reg)
         uint16_t minor_ver  = 0x0111;   // R    firmware minor version
-        // NOTE: which of 0x0000/0x0001 is DC vs AC assumed from DC-before-AC ordering
-        // (matches the threshold layout); confirm by inducing a known DC/AC leak.
     };
     RegMap reg;                         // edit fields to re-map when offsets confirmed
-    float  ma_scale = 0.1f;             // raw register value -> mA (Glenn spec: 1 unit = 0.1 mA)
+    float  leak_scale = 0.01f;          // leakage-current raw -> mA (bench-confirmed 2026-08-04)
+    float  ma_scale   = 0.1f;           // threshold raw -> mA (Glenn spec: 1 unit = 0.1 mA)
 
     // ===================================================================
     // 3. Mock: the base class holds NO mock code/data. The mock lives in the
