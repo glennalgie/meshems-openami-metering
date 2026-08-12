@@ -55,13 +55,21 @@ class Modbus_MD0630 : public ModbusMaster {
     //     10.13 mA read raw 513 / 719 / 1018 (raw x 0.01 = 5.13 / 7.19 / 10.18 mA,
     //     ~1% match over 3 points, all within the 2-15 mA sensor range).
     //   - THRESHOLD registers stay x0.1 mA (CT.exe frames: 003C=6.0 mA, 012C=30.0 mA).
+    // *** VENDOR-CONFIRMED 2026-08-12 (IVY official protocol reply) ***
+    //   - Register map + both scales confirmed (currents x0.01 mA, thresholds x0.1 mA).
+    //   - 0x0100 = Modbus slave address (R/W); 0x0111 = firmware version (R).
+    //   - Absolute value ONLY: no polarity/sign/phase-angle register (IEC 62955)
+    //     -> leakage direction is NOT observable from this sensor.
+    //   - No Modbus status/self-test register: a trip shows ONLY on the hardware
+    //     DO/AO/DA pins (this is what the S6-A alarm-sense path reads).
+    //   - Comm-enabled variant = MD0630T41A; the "-1" suffix omits serial comms.
     struct RegMap {
         uint16_t dc_leakage = 0x0000;   // R    DC leakage current  (x0.01 mA)  [bench-confirmed]
         uint16_t ac_leakage = 0x0001;   // R    AC leakage current  (x0.01 mA)  [bench-confirmed]
         uint16_t dc_thresh  = 0x0002;   // R/W  DC alarm threshold  (x0.1 mA, default  60 =  6.0 mA)
         uint16_t ac_thresh  = 0x0003;   // R/W  AC alarm threshold  (x0.1 mA, default 300 = 30.0 mA)
-        uint16_t version    = 0x0100;   // R    firmware version     (read 1 reg)
-        uint16_t minor_ver  = 0x0111;   // R    firmware minor version
+        uint16_t version    = 0x0100;   // (IVY: 0x0100 is the R/W slave-address reg; reads 1 = default addr)
+        uint16_t minor_ver  = 0x0111;   // R    firmware version (IVY-confirmed)
     };
     RegMap reg;                         // edit fields to re-map when offsets confirmed
     float  leak_scale = 0.01f;          // leakage-current raw -> mA (bench-confirmed 2026-08-04)

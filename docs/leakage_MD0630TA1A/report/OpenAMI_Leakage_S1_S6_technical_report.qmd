@@ -72,7 +72,7 @@ reverse-flow-adaptive protection}
 {\color{neslblue}\rule{\linewidth}{1.4pt}}
 
 \vspace{1.4cm}
-{\normalsize\itshape Consolidated technical report, sprints S1 to S6}
+{\normalsize\itshape Consolidated technical report: sprints S1 to S6, with DC bench validation and vendor protocol confirmation}
 
 \vfill
 
@@ -98,7 +98,7 @@ reverse-flow-adaptive protection}
 
 \vspace{0.8cm}
 {\color{neslblue}\rule{\linewidth}{0.6pt}}
-\begin{center}\small July 2026\end{center}
+\begin{center}\small August 2026\end{center}
 
 \end{titlepage}
 \pagenumbering{roman}
@@ -117,6 +117,11 @@ This report summarises the work carried out over six sprints (S1 to S6) to integ
 - **S4**: add an energy-change correlation cache.
 - **S5**: build a multi-EMS nomination and MQTT isolation scheme.
 - **S6**: sense the hardware alarm outputs and adapt the AC threshold under reverse power flow.
+
+Two later steps close the loop: a **DC bench-injection test** that confirms detection, corrects the
+current scaling and demonstrates the alarm threshold, and **IVY's official protocol reply** that
+independently validates the derived register map and settles the open questions on leakage direction
+and alarm signalling.
 
 Each sprint below gives its objective, method and result. The work followed the
 **"path of least blockage"** approach: build with configurable parameters and a mock pipeline so
@@ -194,23 +199,28 @@ block was found by scanning, then every field was cross-checked against IVY's ow
 ![S1 bench wiring: 12 V powers the module; the PC reads it over the USB-TTL; the ESP32 5 V feeds the
 pull-ups; every ground is common.](wiring_S1.png){#fig-s1-wiring width=84%}
 
-| Register | Default (raw / ×0.1 mA) | Field | Access |
+| Register | Default (raw / value) | Field | Access |
 |:--|:--|:--|:--:|
-| `0x0000` | 0 / 0.00 | DC leakage current | R |
-| `0x0001` | 0 / 0.00 | AC leakage current | R |
-| `0x0002` | 60 / 6.0 | DC threshold | R/W |
-| `0x0003` | 300 / 30.0 | AC threshold | R/W |
-| `0x0100` | 1 | Version | R |
-| `0x0111` | 5 | Minor version | R |
+| `0x0000` | 0 / 0.00 mA | DC leakage current (raw × 0.01 mA) | R |
+| `0x0001` | 0 / 0.00 mA | AC leakage current (raw × 0.01 mA) | R |
+| `0x0002` | 60 / 6.0 mA | DC threshold (raw × 0.1 mA) | R/W |
+| `0x0003` | 300 / 30.0 mA | AC threshold (raw × 0.1 mA) | R/W |
+| `0x0100` | 1 | Modbus slave address | R/W |
+| `0x0111` | 5 | Firmware version | R |
 
-: Derived MD0630 register map (FC 0x03, scaling raw × 0.1 mA). Defaults match the datasheet: DC 6 mA,
-AC 30 mA. {#tbl-regmap}
+: Derived MD0630 register map (FC 0x03). The leakage-current registers scale as raw × 0.01 mA and the
+threshold registers as raw × 0.1 mA. Defaults match the datasheet: DC 6 mA, AC 30 mA. {#tbl-regmap}
+
+At this stage both leakage registers read 0 (no leakage at rest), so the current scaling could not yet be
+distinguished; it was later established as raw × 0.01 mA by DC injection and confirmed by IVY (see the
+*Bench validation* and *Vendor confirmation* sections). The threshold scaling (raw × 0.1 mA) was fixed
+directly from the `CT.exe` frames (`0x003C` = 6.0 mA, `0x012C` = 30.0 mA).
 
 ```{=latex}
 \begin{keybox}[S1 result]
-Communication established at \textbf{address 1, 9600 8N1, FC 0x03, scaling raw $\times$ 0.1 mA}, and
-the register map (\ref{tbl-regmap}) was derived from the live device and confirmed against the
-vendor's \texttt{CT.exe} frames.
+Communication established at \textbf{address 1, 9600 8N1, FC 0x03}, and the register map
+(\ref{tbl-regmap}) was derived from the live device and confirmed against the vendor's \texttt{CT.exe}
+frames. Leakage currents scale as raw $\times$ 0.01 mA and thresholds as raw $\times$ 0.1 mA.
 \end{keybox}
 ```
 
@@ -323,7 +333,10 @@ in the fault-location literature (references [1] and [2]).
 the node whose ramp signature correlates least with its peers), and a confidence gate decides between
 auto-isolation (bracket the two EMS around the leak) and alert-only. The detection triggers on change,
 not on absolute level. A residual-voltage / residual-current phase-angle criterion is noted as the basis
-for a future direction feature, tied to the reserved `phase_angle_deg` field.
+for a future direction feature, tied to the reserved `phase_angle_deg` field. IVY has since confirmed
+(see *Vendor confirmation*) that the MD0630 outputs the absolute residual current only, with no polarity
+or phase-angle register (per IEC 62955); leakage direction therefore requires an external
+residual-voltage reference or a directional RCM, not this sensor alone.
 
 ![S5 nomination flow: rank by magnitude and by minimum peer-correlation, confidence-gated to
 auto-isolate or alert-only.](s5_nomination.png){#fig-s5 width=90%}
@@ -372,7 +385,9 @@ S6-A lets the EMS observe those AC/DC/fault alarm outputs so a trip is logged an
 read-only and never drives the trip. Each 5 V output reaches a GPIO through a single 4.7 k$\Omega$ series
 resistor, which is safe for any output type (an open-collector reads low when active; a push-pull 5 V
 high is clamped by the GPIO's internal ESD diode, with the resistor limiting the current to about
-0.36 mA).
+0.36 mA). IVY later confirmed the module exposes no Modbus status or self-test register, so these
+hardware outputs are the only way to observe a trip; the read-only sense of S6-A is therefore the
+correct and only approach.
 
 During bench testing, three issues were found and fixed:
 
@@ -402,6 +417,72 @@ the S3 write path.
 \end{keybox}
 ```
 
+# Bench validation: DC leakage injection
+
+**Objective.** Confirm on real hardware that the EMS detects an *induced* DC leakage, verify the register
+map and scaling with a known current, and observe the DC alarm threshold being crossed.
+
+**Method.** Glenn's resistor-ladder emulator injects a known DC current through the sensor window. A
+single wire from the ESP32 3.3 V rail passes once through the CT toroid, then returns through a parallel
+resistor ladder to the common ground; each branch adds a known current by Ohm's law, so the current the
+CT sees is the sum of the active branches.
+
+| Active branches | Injected (Ohm's law) | Read DC leakage | AC channel |
+|:--|:--:|:--:|:--:|
+| 2 branches | 5.06 mA | 5.13 mA | 0.00 mA |
+| 3 branches | 7.13 mA | 7.19 mA | 0.00 mA |
+| 4 branches | 10.13 mA | 10.18 mA | 0.00 mA |
+
+: DC bench injection: read values match Ohm's law to about 1 percent, all inside the 2 to 15 mA sensor
+range. {#tbl-bench}
+
+**Findings.**
+
+- **Detection works end to end**: the induced DC leakage is read to about 1 percent.
+- **Register map confirmed**: the DC injection moved `0x0000` while `0x0001` (AC) stayed at 0.00 mA,
+  fixing DC = `0x0000` and AC = `0x0001` (the one assumption left open in S1).
+- **Current scaling corrected**: the readings match only under raw × 0.01 mA, not × 0.1 mA (× 0.1 would
+  imply 50 to 100 mA, impossible in the 2 to 15 mA range). The firmware now applies one scale to the
+  currents (× 0.01 mA) and another to the thresholds (× 0.1 mA).
+- **Threshold crossing shown**: 5.13 mA reads below the 6 mA DC threshold (no alarm), 7.19 mA reads above
+  it (alarm), demonstrating the trip point.
+
+```{=latex}
+\begin{keybox}[Bench result]
+The DC bench injection is the first confirmed non-zero \emph{induced} leakage on real hardware. It
+validates DC detection, confirms the DC/AC register assignment, corrects the current scaling to raw
+$\times$ 0.01 mA, and demonstrates the 6 mA DC threshold being crossed.
+\end{keybox}
+```
+
+# Vendor confirmation of the protocol
+
+After the map was derived and the bench test done, IVY Metering returned an official, point-by-point
+confirmation (12 August 2026) that validates the reverse-engineered protocol and answers the remaining
+open questions.
+
+- **Register map and scaling confirmed**: `0x0000` DC and `0x0001` AC leakage at raw × 0.01 mA per LSB;
+  `0x0002` DC and `0x0003` AC thresholds at raw × 0.1 mA per LSB (`0x003C` = 6.0 mA, `0x012C` = 30.0 mA);
+  `0x0100` slave address (R/W), `0x0111` firmware version. Communication at address 1, 9600 8N1, FC 0x03.
+- **Write rule confirmed**: only FC 0x10 (write multiple) takes effect, FC 0x06 is ignored, and no unlock
+  is required, exactly as found in S3.
+- **Direction**: the module outputs the *absolute* residual current only, with no register for polarity,
+  sign or phase angle (per IEC 62955). Leakage direction is not observable from this sensor; it would
+  need an external residual-voltage reference or a directional RCM.
+- **Alarm signalling**: there is no Modbus status or self-test register. A trip is available only on the
+  hardware DO / AO / DA pins, which is exactly what the S6-A sense path reads.
+- **Part number**: the communication-enabled variant is the **MD0630T41A**; per IVY the `-1` suffix omits
+  serial communication. Our marked unit does communicate over Modbus, so any reorder for the fleet should
+  specify the communication-enabled variant explicitly, a point to confirm with the vendor.
+
+```{=latex}
+\begin{keybox}[Vendor confirmation]
+IVY's official protocol reply (12 August 2026) independently validates the derived register map, the two
+scaling factors and the FC 0x10 write rule, and settles the open questions: the sensor is
+absolute-value only (no direction, IEC 62955) and exposes alarms only on its hardware pins.
+\end{keybox}
+```
+
 # Results summary
 
 @tbl-results collects the verification status of each capability. It distinguishes *code-proven*
@@ -416,8 +497,10 @@ the S3 write path.
 | Nomination and MQTT isolation (S5) | 3-EMS round on one ESP32; live MQTT and charts | hardware-proven (mock peers) |
 | Reverse-flow threshold (S6-B) | builds; transition-only FC16 write path | code-proven |
 | Hardware alarm sense (S6-A) | live `AC=1`/`AC=0` on the EMS, within 200 ms | hardware-proven |
+| DC bench injection | 5.1/7.2/10.2 mA vs Ohm's law; 6 mA threshold crossed | hardware-proven |
+| Protocol confirmed by vendor | IVY point-by-point reply, 12 Aug 2026 | vendor-confirmed |
 
-: Verification status across S1 to S6. {#tbl-results}
+: Verification status across S1 to S6, with bench and vendor validation. {#tbl-results}
 
 The firmware builds cleanly both in the default configuration (all leakage test flags off, no
 regression) and with every S1 to S6 capability compiled in, at about 19 % RAM and 28 % flash on the
@@ -435,6 +518,7 @@ voltage and residual current phase angle (about 90 degrees)}.
 \item Modbus Organization, \emph{MODBUS Application Protocol Specification}, V1.1b3.
 \item IEC 60755, \emph{General requirements for residual current operated protective devices}; IEC 62955
 (residual DC detection for EV charging).
-\item IVY Metering, \emph{MD0630 Type-B AC+DC residual-current monitor}, datasheet and \texttt{CT.exe}
-tool (vendor).
+\item IVY Metering, \emph{MD0630 Type-B AC+DC residual-current monitor}, datasheet (register table on
+page 10) and \texttt{CT.exe} tool (vendor).
+\item IVY Metering, official register-map and protocol confirmation (correspondence), 12 August 2026.
 \end{enumerate}
