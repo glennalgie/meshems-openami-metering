@@ -72,7 +72,7 @@ reverse-flow-adaptive protection}
 {\color{neslblue}\rule{\linewidth}{1.4pt}}
 
 \vspace{1.4cm}
-{\normalsize\itshape Consolidated technical report: sprints S1 to S6, with DC bench validation and vendor protocol confirmation}
+{\normalsize\itshape Consolidated technical report: sprints S1 to S6, with DC and AC bench validation and vendor protocol confirmation}
 
 \vfill
 
@@ -118,10 +118,10 @@ This report summarises the work carried out over six sprints (S1 to S6) to integ
 - **S5**: build a multi-EMS nomination and MQTT isolation scheme.
 - **S6**: sense the hardware alarm outputs and adapt the AC threshold under reverse power flow.
 
-Two later steps close the loop: a **DC bench-injection test** that confirms detection, corrects the
-current scaling and demonstrates the alarm threshold, and **IVY's official protocol reply** that
-independently validates the derived register map and settles the open questions on leakage direction
-and alarm signalling.
+Three later steps close the loop: **DC and AC bench-injection tests** that confirm detection on both
+channels, correct the current scaling and demonstrate the alarm thresholds, and **IVY's official protocol
+reply** that independently validates the derived register map and settles the open questions on leakage
+direction and alarm signalling.
 
 Each sprint below gives its objective, method and result. The work followed the
 **"path of least blockage"** approach: build with configurable parameters and a mock pipeline so
@@ -455,6 +455,42 @@ $\times$ 0.01 mA, and demonstrates the 6 mA DC threshold being crossed.
 \end{keybox}
 ```
 
+# Bench validation: AC leakage injection
+
+**Objective.** Repeat the bench validation on the AC channel: inject a known AC residual current, read the
+AC channel, and cross the 30 mA AC alarm threshold.
+
+**Method.** An isolated 9 V AC-AC adapter (230 VAC to 9 V AC) drives a series 1 k$\Omega$ resistor and a
+wire threaded N turns through the CT window, then back to the adapter (@fig-ac-wiring). The loop is
+galvanically isolated from the readout and couples to the CT magnetically only, so it is safe (SELV). The
+loop current is small (about 9 to 12 mA); the N turns multiply what the CT sees. The readout wiring is
+identical to the DC test.
+
+![AC leakage test wiring: an isolated 9 V AC source drives a 1 k$\Omega$ resistor and a wire threaded N
+turns through the CT window; the readout is identical to the DC test.](wiring_AC.png){#fig-ac-wiring width=98%}
+
+| Turns through CT | AC leakage read | DC channel | vs 30 mA threshold |
+|:--|:--:|:--:|:--:|
+| 2 turns | 24.68 mA | 0.00 mA | below, no alarm |
+| 3 turns | 36.97 mA | 0.00 mA | above, alarm |
+
+: AC bench injection: the AC reading is linear (about 12.3 mA per turn) and the DC channel stays at 0. {#tbl-ac-bench}
+
+**Findings.**
+
+- **AC detection works**: the injected AC leakage is read linearly (24.68 / 36.97 mA at 2 / 3 turns, about 12.3 mA per turn; the light-loaded adapter sits a little above 9 V).
+- **Register map re-confirmed**: the AC injection moved `0x0001` while `0x0000` (DC) stayed at 0.00 mA, the mirror image of the DC test.
+- **Threshold crossing shown**: 24.68 mA reads below the 30 mA AC threshold (no alarm), 36.97 mA reads above it (alarm).
+- The energy-change correlation of S4 fired on each AC step, exercising that path on the AC channel too.
+
+```{=latex}
+\begin{keybox}[AC bench result]
+The AC bench injection validates AC detection end to end and demonstrates the 30 mA AC threshold being
+crossed (24.68 mA below, 36.97 mA above). Together with the DC bench, both the AC and DC leakage channels
+are now validated on real hardware.
+\end{keybox}
+```
+
 # Vendor confirmation of the protocol
 
 After the map was derived and the bench test done, IVY Metering returned an official, point-by-point
@@ -498,6 +534,7 @@ absolute-value only (no direction, IEC 62955) and exposes alarms only on its har
 | Reverse-flow threshold (S6-B) | builds; transition-only FC16 write path | code-proven |
 | Hardware alarm sense (S6-A) | live `AC=1`/`AC=0` on the EMS, within 200 ms | hardware-proven |
 | DC bench injection | 5.1/7.2/10.2 mA vs Ohm's law; 6 mA threshold crossed | hardware-proven |
+| AC bench injection | 24.68 / 36.97 mA; 30 mA threshold crossed | hardware-proven |
 | Protocol confirmed by vendor | IVY point-by-point reply, 12 Aug 2026 | vendor-confirmed |
 
 : Verification status across S1 to S6, with bench and vendor validation. {#tbl-results}

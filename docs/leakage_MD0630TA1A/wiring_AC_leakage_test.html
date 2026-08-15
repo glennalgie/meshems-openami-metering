@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD0630 — AC leakage bench test wiring</title>
+<style>
+  :root{
+    --ink:#17272c; --muted:#5b6b70; --bg:#ffffff; --card:#f5f8f8;
+    --ac:#e0821f; --acbg:#fff3e6; --teal:#116b74; --tealbg:#e6f2f2;
+    --green:#1f8a4c; --greenbg:#e8f6ee; --blue:#2b6cb0; --bluebg:#e9f1fb;
+    --red:#c0392b; --redbg:#fdecea; --line:#d6e0e0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 60px}
+  header h1{margin:0 0 4px;font-size:1.5rem;color:var(--teal)}
+  header p{margin:0;color:var(--muted)}
+  .badge{display:inline-block;background:var(--acbg);color:var(--ac);border:1px solid var(--ac);
+    border-radius:20px;padding:2px 12px;font-size:.8rem;font-weight:600;margin-top:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px;margin:20px 0;overflow-x:auto}
+  svg{display:block;min-width:900px;width:100%;height:auto}
+  h2{font-size:1.05rem;color:var(--teal);border-bottom:2px solid var(--teal);
+    padding-bottom:4px;margin:26px 0 10px}
+  table{border-collapse:collapse;width:100%;font-size:.92rem}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}
+  th{background:var(--tealbg);color:var(--teal)}
+  td.alarm{color:var(--red);font-weight:600}
+  td.ok{color:var(--green);font-weight:600}
+  ol{padding-left:20px} ol li{margin:6px 0}
+  .safe{background:var(--redbg);border-left:4px solid var(--red);border-radius:6px;padding:12px 14px}
+  .safe b{color:var(--red)}
+  .k{font-family:Consolas,ui-monospace,monospace;background:#eef3f3;border:1px solid var(--line);
+    border-radius:4px;padding:0 5px;font-size:.9em}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.85rem;color:var(--muted);margin-top:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:22px;height:0;border-top:3px solid #000;display:inline-block}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>MD0630 — AC leakage bench test</h1>
+  <p>Injecting a known <b>AC</b> residual current with an isolated 9&nbsp;V AC source, to read the AC channel and cross the 30&nbsp;mA AC threshold.</p>
+  <span class="badge">Companion to the DC resistor-ladder test</span>
+</header>
+
+<div class="card">
+<svg viewBox="0 0 1040 630" role="img" aria-label="AC leakage test wiring schematic">
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#5b6b70"/>
+    </marker>
+    <marker id="arrO" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#e0821f"/>
+    </marker>
+  </defs>
+
+  <!-- ===== ZONE A : AC INJECTION (orange) ===== -->
+  <rect x="18" y="20" width="640" height="300" rx="10" fill="#fff9f2" stroke="#e0821f" stroke-dasharray="5 4"/>
+  <text x="34" y="44" font-size="14" font-weight="700" fill="#e0821f">A &#183; AC INJECTION LOOP (isolated, SELV)</text>
+
+  <!-- mains -->
+  <rect x="40" y="60" width="150" height="46" rx="6" fill="#fdecea" stroke="#c0392b"/>
+  <text x="115" y="82" font-size="12.5" font-weight="700" fill="#c0392b" text-anchor="middle">230&#8239;V AC MAINS</text>
+  <text x="115" y="98" font-size="10.5" fill="#c0392b" text-anchor="middle">wall socket</text>
+  <line x1="115" y1="106" x2="115" y2="150" stroke="#c0392b" stroke-width="2.5" marker-end="url(#arr)"/>
+
+  <!-- transformer -->
+  <rect x="40" y="150" width="220" height="92" rx="8" fill="#fff3e6" stroke="#e0821f" stroke-width="1.6"/>
+  <text x="150" y="172" font-size="13" font-weight="700" fill="#17272c" text-anchor="middle">Mascot Type 8310</text>
+  <text x="150" y="190" font-size="11" fill="#5b6b70" text-anchor="middle">AC / AC adapter (isolating)</text>
+  <text x="150" y="210" font-size="12.5" font-weight="700" fill="#e0821f" text-anchor="middle">230&#8239;VAC &#8594; 9&#8239;V AC</text>
+  <text x="150" y="228" font-size="11" fill="#5b6b70" text-anchor="middle">340&#8239;mA &#183; 5.5&#8239;mm barrel out</text>
+
+  <!-- output terminals -->
+  <circle cx="262" cy="176" r="4.5" fill="#e0821f"/><text x="272" y="180" font-size="10.5" fill="#5b6b70">AC&#8321;</text>
+  <circle cx="262" cy="216" r="4.5" fill="#e0821f"/><text x="272" y="220" font-size="10.5" fill="#5b6b70">AC&#8322;</text>
+
+  <!-- AC1 -> resistor -> down to toroid -->
+  <line x1="266" y1="176" x2="318" y2="176" stroke="#e0821f" stroke-width="2.6"/>
+  <polyline points="318,176 326,166 338,186 350,166 362,186 374,166 382,176"
+     fill="none" stroke="#e0821f" stroke-width="2.6"/>
+  <text x="350" y="156" font-size="12" font-weight="700" fill="#e0821f" text-anchor="middle">R = 1&#8239;k&#937;</text>
+  <text x="404" y="172" font-size="10" fill="#5b6b70">&#188;&#8239;W</text>
+  <line x1="382" y1="176" x2="470" y2="176" stroke="#e0821f" stroke-width="2.6"/>
+  <line x1="470" y1="176" x2="470" y2="238" stroke="#e0821f" stroke-width="2.6"/>
+
+  <!-- CT toroid -->
+  <ellipse cx="510" cy="262" rx="66" ry="42" fill="none" stroke="#116b74" stroke-width="9"/>
+  <ellipse cx="510" cy="262" rx="32" ry="19" fill="#eef7f7" stroke="#116b74" stroke-width="1.3"/>
+
+  <!-- injection wire: 3 clean turns through the window -->
+  <path d="M470,238 L470,232 L494,232 L494,292 Q502,299 510,292 L510,232 Q518,225 526,232 L526,292 L558,292"
+     fill="none" stroke="#e0821f" stroke-width="2.6" stroke-linejoin="round"/>
+  <text x="510" y="214" font-size="11" font-weight="700" fill="#e0821f" text-anchor="middle">&#215; N turns</text>
+  <text x="510" y="330" font-size="11.5" font-weight="700" fill="#116b74" text-anchor="middle">CT window (part of the MD0630)</text>
+
+  <!-- return wire toroid -> AC2 -->
+  <line x1="558" y1="292" x2="600" y2="292" stroke="#e0821f" stroke-width="2.6"/>
+  <line x1="600" y1="292" x2="600" y2="216" stroke="#e0821f" stroke-width="2.6"/>
+  <line x1="600" y1="216" x2="266" y2="216" stroke="#e0821f" stroke-width="2.6" marker-end="url(#arrO)"/>
+
+  <text x="150" y="270" font-size="10.5" fill="#5b6b70" text-anchor="middle">Loop I = 9&#8239;V / R &#8776; 9&#8239;mA</text>
+  <text x="150" y="286" font-size="10.5" fill="#5b6b70" text-anchor="middle">(safe, ~0.08&#8239;W)</text>
+  <text x="150" y="302" font-size="10.5" fill="#5b6b70" text-anchor="middle">CT sees I&#215;N &#8594; ~9N mA</text>
+
+  <!-- ===== ZONE B : READOUT (simplified) ===== -->
+  <rect x="18" y="340" width="1004" height="262" rx="10" fill="#f3f8f8" stroke="#116b74" stroke-dasharray="5 4"/>
+  <text x="34" y="364" font-size="14" font-weight="700" fill="#116b74">B &#183; MD0630 READOUT (identical to the DC test)</text>
+
+  <!-- toroid link -->
+  <line x1="510" y1="304" x2="510" y2="392" stroke="#116b74" stroke-width="1.4" stroke-dasharray="3 3"/>
+
+  <!-- 12V supply -->
+  <rect x="60" y="412" width="150" height="56" rx="6" fill="#e9f1fb" stroke="#2b6cb0"/>
+  <text x="135" y="435" font-size="12.5" font-weight="700" fill="#2b6cb0" text-anchor="middle">12&#8239;V DC supply</text>
+  <text x="135" y="453" font-size="10.5" fill="#5b6b70" text-anchor="middle">module power</text>
+
+  <!-- MD0630 -->
+  <rect x="440" y="392" width="220" height="120" rx="8" fill="#e6f2f2" stroke="#116b74" stroke-width="1.6"/>
+  <text x="550" y="420" font-size="13" font-weight="700" fill="#116b74" text-anchor="middle">IVY MD0630</text>
+  <text x="550" y="438" font-size="10.5" fill="#5b6b70" text-anchor="middle">Type-B AC+DC RCM &#183; addr 1</text>
+  <text x="550" y="456" font-size="10.5" fill="#5b6b70" text-anchor="middle">9600 8N1 &#183; FC03</text>
+  <text x="550" y="482" font-size="10.5" fill="#5b6b70" text-anchor="middle">AC leak = 0x0001 (&#215;0.01&#8239;mA)</text>
+  <text x="550" y="499" font-size="10.5" fill="#5b6b70" text-anchor="middle">AC threshold 30&#8239;mA @0x0003</text>
+
+  <!-- ESP32 -->
+  <rect x="812" y="412" width="170" height="56" rx="8" fill="#e8f6ee" stroke="#1f8a4c" stroke-width="1.6"/>
+  <text x="897" y="435" font-size="13" font-weight="700" fill="#1f8a4c" text-anchor="middle">ESP32-S3</text>
+  <text x="897" y="453" font-size="10.5" fill="#5b6b70" text-anchor="middle">RS485_1 UART</text>
+
+  <!-- 12V -> module -->
+  <line x1="210" y1="440" x2="436" y2="440" stroke="#2b6cb0" stroke-width="2.4" marker-end="url(#arr)"/>
+  <text x="323" y="430" font-size="10.5" fill="#2b6cb0" text-anchor="middle">VCC 12&#8239;V &#183; GND</text>
+
+  <!-- module <-> ESP32 UART -->
+  <line x1="660" y1="433" x2="808" y2="433" stroke="#116b74" stroke-width="2.4" marker-end="url(#arr)"/>
+  <line x1="808" y1="447" x2="660" y2="447" stroke="#116b74" stroke-width="2.4" marker-end="url(#arr)"/>
+  <text x="734" y="424" font-size="10.5" fill="#116b74" text-anchor="middle">UART (Modbus)</text>
+
+  <text x="520" y="552" font-size="11" fill="#5b6b70" text-anchor="middle">Same wiring as the DC test: module TX &#8596; ESP32 GPIO42, module RX &#8596; GPIO7, 2 &#215; 4.7&#8239;k&#937; pull-ups to 3V3, common GND.</text>
+  <text x="520" y="572" font-size="11" fill="#5b6b70" text-anchor="middle">The AC loop (A) shares <tspan font-weight="700">no ground</tspan> with the readout &#8212; it couples to the CT window magnetically only.</text>
+</svg>
+<div class="legend">
+  <span><span class="sw" style="border-color:#e0821f"></span> AC injection (isolated 9&#8239;V)</span>
+  <span><span class="sw" style="border-color:#2b6cb0"></span> +12&#8239;V power</span>
+  <span><span class="sw" style="border-color:#116b74"></span> UART / Modbus</span>
+  <span><span class="sw" style="border-color:#000"></span> GND (common)</span>
+</div>
+</div>
+
+<div class="grid">
+<div>
+<h2>Expected reading vs turns</h2>
+<table>
+  <tr><th>Turns through CT</th><th>CT-sensed AC (&#8776;9&#8239;mA/turn)</th><th>vs 30&#8239;mA threshold</th></tr>
+  <tr><td>2 turns</td><td>~18&#8239;mA</td><td class="ok">below &#8594; no alarm</td></tr>
+  <tr><td>3 turns</td><td>~27&#8239;mA</td><td class="ok">below &#8594; no alarm</td></tr>
+  <tr><td>4 turns</td><td>~36&#8239;mA</td><td class="alarm">above &#8594; ALARM</td></tr>
+  <tr><td>5 turns</td><td>~45&#8239;mA</td><td class="alarm">above &#8594; alarm</td></tr>
+</table>
+<p style="font-size:.85rem;color:var(--muted)">A light-loaded AC adapter often outputs a bit above 9&#8239;V, so real mA/turn may be ~9&#8211;12. <b>Trust the module&#8217;s live reading</b> &#8212; wind turns until it crosses 30&#8239;mA.</p>
+</div>
+<div>
+<h2>Procedure</h2>
+<ol>
+  <li>Keep the <b>readout</b> (zone B) wired as in the DC test; flash the real-read firmware (<span class="k">-DLEAKAGE_BRINGUP</span>, MOCK off).</li>
+  <li>Build the <b>AC loop</b> (zone A): <span class="k">9&#8239;V AC &#8594; 1&#8239;k&#937; &#8594; wire through the CT &#8594; back</span>. Start with <b>2 turns</b>.</li>
+  <li>Power on, capture serial: the <b>AC</b> channel now reads &gt;0 while <b>DC stays ~0</b> (this also re-confirms 0x0001 = AC).</li>
+  <li>Add turns to raise the reading: aim <b>~27&#8239;mA</b> (no alarm), then <b>~36&#8239;mA</b> (alarm) to show the 30&#8239;mA crossing.</li>
+</ol>
+</div>
+</div>
+
+<h2>Safety</h2>
+<div class="safe">
+  <b>230&#8239;V mains stays inside the adapter.</b> Never open or probe the mains side. The Mascot 8310 is an <b>isolating</b> transformer, so its <b>9&#8239;V AC output is SELV (safe extra-low voltage)</b> and galvanically separated from the mains.<br><br>
+  &#8226; Never short the 9&#8239;V output without the series resistor (it would pull up to 340&#8239;mA).<br>
+  &#8226; A <b>1&#8239;k&#937; &#188;&#8239;W</b> resistor is ample (dissipation ~0.08&#8239;W at 9&#8239;mA).<br>
+  &#8226; The AC loop needs <b>no electrical connection</b> to the ESP32/module &#8212; it only threads the CT window.
+</div>
+
+<p style="color:var(--muted);font-size:.85rem;margin-top:24px">Bench schematic for the OpenAMI / MeshEMS leakage assignment &#183; to be added to the consolidated S1&#8211;S6 report (AC leakage section).</p>
+</div>
+</body>
+</html>
