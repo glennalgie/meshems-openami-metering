@@ -12,15 +12,22 @@
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"
 #define MQTT_PUBLISH_INTERVAL   30000
-// Local Mosquitto broker on this PC's WiFi IP (anonymous connection). Override in secrets.h.
+// Street-EMS demo: publish to the shiftr.io public MQTT broker so the node appears live in
+// the public namespace as StreetEMS_<id>. Each node keeps its own WiFi (and may override the
+// broker) in secrets.h; the #ifndef guards below let secrets.h win.
 #ifndef MQTT_SERVER
-#define MQTT_SERVER             "10.0.0.116"              // local PC running Mosquitto
+#define MQTT_SERVER             "public.cloud.shiftr.io"
 #endif
-#define MQTT_USER               ""                        // empty = anonymous (local Mosquitto)
-#define MQTT_PW                 ""
-//#define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
-//#define MQTT_USER               "public"                  // leave empty for test.mosquitto.org
-//#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org
+#ifndef MQTT_USER
+#define MQTT_USER               "public"                  // shiftr.io public instance
+#endif
+#ifndef MQTT_PW
+#define MQTT_PW                 "public"
+#endif
+// Local Mosquitto alternative (set these in secrets.h to use instead of shiftr.io):
+//   #define MQTT_SERVER "10.0.0.116"   // PC running Mosquitto
+//   #define MQTT_USER   ""             // empty = anonymous
+//   #define MQTT_PW     ""
 
 // DTM485 custom Ascii on serial on rsa485 -  Serial Pins and Baud Rate
 #define DTM485_SERIAL Serial2
