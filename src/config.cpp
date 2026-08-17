@@ -1,5 +1,6 @@
 #include <config.h>
 #include <Arduino.h>
+#include <esp_mac.h>
 
 char device_id[MAX_DEVICE_ID_CHARS] = {0};
 

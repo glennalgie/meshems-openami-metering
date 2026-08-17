@@ -1,5 +1,6 @@
 #include <modbus_sht20.h>
 #include <TimeLib.h>
+#include <time_utils.h>
 
 #define PAUSE_ON_RAMP_LEVELS 30000
 
@@ -40,14 +41,14 @@ uint8_t Modbus_SHT20::poll() {
 #ifdef ENABLE_DEBUG_MODBUS
         Serial.printf("MODBUS SHT20: addr:%d reg:0x001 value:%d temperature:%2.1fC\n", modbus_address, getResponseBuffer(0), getResponseBuffer(0)/10.0); 
 #endif
-        timestamp_last_report = now();
+        timestamp_last_report = utc_now();
         temperature = getResponseBuffer(0);
         humidity = getResponseBuffer(1);
         //route_poll_response(reg, getResponseBuffer(0); //TODO parse multi-byte response in route_poll_response instead of here
         Serial.printf("MODBUS SHT20: Temperature: %2.1fC  Humidity:%2.1f%%\n", temperature/10.0, humidity/10.0);
 
     } else {
-        timestamp_last_failure = now();
+        timestamp_last_failure = utc_now();
         Serial.println("MODBUS SHT20 POLL FAIL");
     }
     
@@ -63,7 +64,7 @@ uint8_t Modbus_SHT20::query_register(uint16_t reg) {
     if (result == ku8MBSuccess) {
         route_poll_response(reg, getResponseBuffer(0));
     } else {
-        timestamp_last_failure = now();
+        timestamp_last_failure = utc_now();
     }
     
     return result;

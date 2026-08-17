@@ -18,6 +18,7 @@
 
 #include <ArduinoJson.h>
 #include <Wire.h>
+#include <time_utils.h>
 
 struct EMS_ENV_Model {
     uint16_t model_id = 998;   // Custom EMS environment model ID
@@ -27,7 +28,11 @@ struct EMS_ENV_Model {
     float temperature_C = 0.0;
     float humidity_percent = 0.0;
     bool door_open = false;     // True = open, False = closed
-    unsigned long timestamp_ms = 0; // Time of last update in millis()
+    unsigned long timestamp_ms = 0; // Diagnostic uptime of last update
+    uint32_t last_seen_at = 0; // UTC epoch seconds of newest environment observation
+    uint32_t temperature_observed_at = 0;
+    uint32_t humidity_observed_at = 0;
+    uint32_t door_observed_at = 0;
     // TODO support GNSS/GPS intrgation into EMS PCB OR allow remote config os site when staged, geo coordinates of the site 
     // Cached GPS data - typically static unless a moving platform -maybe someday
     float latitude_deg = 0.0;      // GPS latitude (decimal degrees)
@@ -51,6 +56,10 @@ struct EMS_ENV_Model {
         humidity_percent = 0.0;
         door_open = false;
         timestamp_ms = 0;
+        last_seen_at = 0;
+        temperature_observed_at = 0;
+        humidity_observed_at = 0;
+        door_observed_at = 0;
         latitude_deg = 0.0;
         longitude_deg = 0.0;
         altitude_m = 0.0;
@@ -79,6 +88,10 @@ struct EMS_ENV_Model {
         doc["door_open"] = door_open;
         doc["door_open_duration_ms"] = door_open_duration_ms;
         doc["timestamp_ms"] = timestamp_ms;
+        doc["last_seen_at"] = last_seen_at;
+        doc["temperature_observed_at"] = temperature_observed_at;
+        doc["humidity_observed_at"] = humidity_observed_at;
+        doc["door_observed_at"] = door_observed_at;
         doc["last_modbus_update_ms"] = last_modbus_update_ms;
         doc["last_gpio_update_ms"] = last_gpio_update_ms;
 
@@ -118,6 +131,23 @@ struct EMS_ENV_Model {
             door_open = current_state;
             last_gpio_update_ms = millis();
             timestamp_ms = millis();
+            door_observed_at = utc_now();
+            if (door_observed_at != 0) {
+                last_seen_at = door_observed_at;
+            }
+        }
+    }
+
+    void updateModbusSensor(float temperature, float humidity) {
+        temperature_C = temperature;
+        humidity_percent = humidity;
+        last_modbus_update_ms = millis();
+        timestamp_ms = last_modbus_update_ms;
+        const uint32_t observed_at = utc_now();
+        temperature_observed_at = observed_at;
+        humidity_observed_at = observed_at;
+        if (observed_at != 0) {
+            last_seen_at = observed_at;
         }
     }
 
@@ -147,5 +177,7 @@ struct EMS_ENV_Model {
     
     }   
 };
+
+extern EMS_ENV_Model ems_env_cache;
 
 #endif // EMS_ENV_MODEL_H

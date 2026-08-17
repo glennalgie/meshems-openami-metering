@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFiMulti.h>
 #include <wifi.h>
+#include <time_utils.h>
 
 //Kenya hackathon
 //#define WIFI_PW "E@rthday2025"
@@ -17,6 +18,17 @@
 
 int CONNECT_ATTEMPTS = 6;
 WiFiMulti wifiMulti;
+
+static void setup_utc_time() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+  const unsigned long sync_started_ms = millis();
+  while (!utc_time_is_valid() && millis() - sync_started_ms < 10000) {
+    delay(100);
+  }
+
+  Serial.printf("UTC time sync: %s\n", utc_time_is_valid() ? "OK" : "PENDING");
+}
 
 bool wifi_client_connected() {
   return WiFi.isConnected() && (WIFI_STA == (WiFi.getMode() & WIFI_STA));
@@ -38,5 +50,8 @@ bool setup_wifi() {
     Serial.printf("wifi failed to connect - retrying %s\n", WIFI_SSID);
   }
   Serial.printf("wifi: %s: %s\n", WIFI_SSID, wifi_client_connected() ?  WiFi.localIP().toString().c_str() : "FAILED");
+  if (wifi_client_connected()) {
+    setup_utc_time();
+  }
   return wifi_client_connected();
 }

@@ -9,6 +9,7 @@
 #include <data_model.h>
 #include <config.h>
 #include <math.h>  // For sin function in test data
+#include <ems_env_model.h>
 
 // Poll every 10 seconds (300000ms = 5 mins for production)
 // Changed to 500ms for more stable operation
@@ -133,14 +134,7 @@ void update() {
     
     // Get all measurements from meters
     for(int i=0;i<MODBUS_NUM_METERS;i++) {
-        readings[i].current = dds238_meters[i]->getCurrent(); // Current
-        readings[i].voltage = dds238_meters[i]->getVoltage(); // Voltage
-        readings[i].active_power = dds238_meters[i]->getActivePower(); // Active Power
-        readings[i].power_factor = dds238_meters[i]->getPowerFactor(); // Power Factor
-        readings[i].frequency = dds238_meters[i]->getFrequency(); // Frequency
-        readings[i].total_energy = dds238_meters[i]->getTotalEnergy(); // Total Energy
-        readings[i].export_energy = dds238_meters[i]->getExportEnergy(); // Export Energy
-        readings[i].import_energy = dds238_meters[i]->getImportEnergy(); // Import Energy
+        readings[i] = dds238_meters[i]->last_reading;
         
         // If readings are zero or invalid, generate test data
         /*
@@ -181,8 +175,8 @@ void poll_energy_meters() {
 
 void poll_thermostats() {
     // Poll cabinet temp/humid sensor
-    for(int i = 0; i < MODBUS_NUM_THERMOSTATS; i++) {
-        //sht20_thermostats[i]->poll();  // TODO future option for multiple temp sensing in cabinet and nearby 
+    if (sht20.poll() == ModbusMaster::ku8MBSuccess) {
+        ems_env_cache.updateModbusSensor(sht20.getTemperature(), sht20.getHumidity());
     }
     // Update data model cache with latest readings
     update();

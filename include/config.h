@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 #define MAX_DEVICE_ID_CHARS   32
-#define DEVICE_ID_PREFIX      "StreetPoleEMS_"
+#define DEVICE_ID_PREFIX      "StreetEMS_"
 
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"

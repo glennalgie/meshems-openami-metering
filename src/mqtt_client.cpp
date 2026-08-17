@@ -72,6 +72,29 @@ establishing and encode and decode json documents and mqtt operations of a 2way 
 
    Ideally each meter should have stats published of its powerflow managed energy asset transfer individual sessions performing as a 
    generate(export), store, consume(import), transform (AC-DC voltage coupled form, voltage level conversion),  transport (as a LVFeeder Lead EMS operational role) managed energy servcice entities  
+
+Timestamp and historical-analysis roadmap (next development iterations):
+  TODO P0 Decide how to buffer or explicitly reject samples produced before NTP
+       synchronization; time_sync_valid currently distinguishes them with a zero
+       UTC timestamp, but they are not retained for later publication.
+  TODO P1 Migrate the compatibility field "timestamp" to the explicit contract
+       observed_at/published_at on every topic. Timestamp the legacy
+       comma-separated publisher and add time_source where appropriate.
+  TODO P1 Include device_id, boot_id, schema_version, sequence,
+       sample_interval_ms, and data_quality/stale flags to detect gaps,
+       duplicates, reboots, and old data.
+  TODO P1 Preserve interval boundaries for accumulated energy: interval_start_at,
+       interval_end_at, duration_s, import/export deltas, and reset/rollover flags.
+       Align 15-minute/hour/day/month windows to UTC; apply site timezone only to
+       presentation and explicitly configured billing boundaries.
+  TODO P2 Publish weekly/monthly rollups with sample count, coverage, min, max,
+       mean, energy delta, and useful percentiles while retaining raw event-time
+       samples for load-shape, seasonality, anomaly, leakage, harmonics, and
+       environment-correlation heuristics.
+  TODO P2 Document topic schemas and units, validate payloads, and test reboot,
+       clock correction, offline buffering, duplicates, out-of-order delivery,
+       meter rollover, missing samples, and daylight-saving transitions.
+
 Summary of New Stats          Counter	Description
 mqtt_BWPubOut_payload_bytes
 mqtt_BWPubOut_tcpip_bytes
@@ -99,6 +122,7 @@ last_bandwidth_report_time  time in secs since last report
 #include <sunspec_model_1.h> 
 #include <sunspec_model_11.h>    
 #include <ems_env_model.h>    
+#include <time_utils.h>
 //#include "modbus_devices.h"             // added by Kevin - future use
 #include "data_model.h"
 #define ENABLE_DEBUG_MQTT = 1
@@ -259,9 +283,9 @@ void mqtt_publish_EMS_MFR(String EMSId, long timestamp) { // TODO pass EMSdata s
 void mqtt_publish_EMS_ENV(String EMSId, long timestamp) {
   String topicBuf = "subpanel_ENV"; // Subtopic under the device topic
   JsonDocument jsonDoc;
-  EMS_ENV_Model EMS_ENV_cache;
-  EMS_ENV_cache.toJson(jsonDoc);
-  jsonDoc["timestamp"] = timestamp;
+  ems_env_cache.toJson(jsonDoc);
+  jsonDoc["timestamp"] = ems_env_cache.last_seen_at;
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
   mqtt_publish_json(topicBuf.c_str(), &jsonDoc);
 }
 void mqtt_publish_Harmonics(String EMSId, long timestamp) { // TODO pass EMSdata structured model
@@ -495,7 +519,7 @@ void setup_mqtt_client() {
 }
 
 void loop_mqtt() {
-  uint32_t loop_timestamp = esp_log_timestamp();
+  uint32_t loop_timestamp = utc_now();
 
       bool mqtt_connected = mqttclient.connected();
       if (!mqtt_connected) {
@@ -571,15 +595,18 @@ boolean mqtt_connected()
 }
 
 
-// TODO add door contact/tamper and publish in OPENAMI EMS nde subtopic
 void mqtt_publish_door_opened() {
-  char buf[32] = {0};
-  sprintf(buf,"%s/door", topic_device);
-  mqttclient.publish(buf, "open", 0);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "open";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
 
 void mqtt_publish_door_closed() {
-  char buf[32] = {0};
-  sprintf(buf,"%s/door", topic_device);
-  mqttclient.publish(buf, "closed", 0);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "closed";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
