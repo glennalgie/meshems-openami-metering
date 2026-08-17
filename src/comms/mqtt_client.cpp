@@ -121,6 +121,7 @@ last_bandwidth_report_time  time in secs since last report
 #endif
 #include <metering/sunspec_model_11.h>
 #include <metering/ems_env_model.h>
+#include <time_utils.h>
 //#include "modbus_devices.h"             // added by Kevin - future use
 #include "core/data_model.h"
 // Debug MQTT serial output is controlled by the project-wide ENABLE_DEBUG flag.
@@ -473,21 +474,14 @@ void mqtt_publish_EMS_MFR(long timestamp) {
 // Publish subpanel environmental data — temperature and humidity from the SHT20
 // sensor (always present on the RS-485 bus).
 void mqtt_publish_EMS_ENV(long timestamp) {
-  EMS_ENV_Model EMS_ENV_cache;
-  EMS_ENV_cache.timestamp_ms = (unsigned long)timestamp;
-#ifdef ENABLE_MODBUS_MASTER
+  (void)timestamp;
   // Only populate sensor values once the SHT20 has returned at least one
   // successful poll response — avoids publishing 0°C / 0% as real data
   // during boot or when the sensor is absent.
-  if (get_sht20_success_count() > 0) {
-    EMS_ENV_cache.temperature_C    = get_sht20_temperature();
-    EMS_ENV_cache.humidity_percent = get_sht20_humidity();
-    EMS_ENV_cache.last_modbus_update_ms = millis();
-  }
-#endif
   JsonDocument jsonDoc;
-  EMS_ENV_cache.toJson(jsonDoc);
-  jsonDoc["timestamp"] = timestamp;
+  ems_env_cache.toJson(jsonDoc);
+  jsonDoc["timestamp"] = ems_env_cache.last_seen_at;
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
   jsonDoc["status_ms"] = millis();
   jsonDoc["meter_count"] = MODBUS_NUM_METERS;
   jsonDoc["ct0_amps"] = (MODBUS_NUM_METERS > 0) ? readings[0].current : 0.0f;
@@ -1026,7 +1020,7 @@ void setup_mqtt_client() {
 }
 
 void loop_mqtt() {
-  uint32_t loop_timestamp = esp_log_timestamp();
+  uint32_t loop_timestamp = utc_now();
   const unsigned long nowMs = millis();
   static bool firstPublish = true;
   static unsigned long lastSubpanelMs = 0;
@@ -1175,16 +1169,19 @@ boolean mqtt_connected()
 
 // TODO add door contact/tamper and publish in OPENAMI EMS nde subtopic
 void mqtt_publish_door_opened() {
-  // Buffer sized to hold topic_device (~40 chars) + "/door" + null terminator.
-  char buf[128] = {0};
-  snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "open", true);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "open";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
 
 void mqtt_publish_door_closed() {
-  char buf[128] = {0};
-  snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "closed", true);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "closed";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
 
 #endif // ENABLE_MQTT

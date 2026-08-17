@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <WiFiMulti.h>
 #include <comms/wifi.h>
+#include <time_utils.h>
 
 
 #if __has_include(<secrets.h>)
@@ -49,6 +50,13 @@
 static WiFiMulti wifiMulti;
 static bool wifiMultiConfigured = false;
 static unsigned long lastWifiReconnectAttempt = 0;
+
+static void setup_utc_time() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  const unsigned long syncStartedMs = millis();
+  while (!utc_time_is_valid() && millis() - syncStartedMs < 10000) delay(100);
+  Serial.printf("UTC time sync: %s\n", utc_time_is_valid() ? "OK" : "PENDING");
+}
 
 static const char* wifiStatusName(wl_status_t status) {
   switch (status) {
@@ -199,6 +207,7 @@ bool setup_wifi() {
 
   if (connectDefaultAccessPoint()) {
     lastWifiReconnectAttempt = millis();
+    setup_utc_time();
     return true;
   }
 
@@ -222,6 +231,7 @@ bool setup_wifi() {
   Serial.printf("wifi: %s: %s\n",
                 WiFi.SSID().length() ? WiFi.SSID().c_str() : WIFI_SSID,
                 wifi_client_connected() ? WiFi.localIP().toString().c_str() : "FAILED");
+  if (wifi_client_connected()) setup_utc_time();
   return wifi_client_connected();
 }
 

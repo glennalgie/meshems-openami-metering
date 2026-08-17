@@ -10,8 +10,10 @@
 
  #include <Arduino.h>
  #include <core/data_model.h>
+ #include <metering/ems_env_model.h>
 
   PowerData readings[MODBUS_NUM_METERS]; // Array to hold readings for each meter
+  EMS_ENV_Model ems_env_cache;
   
   /**
    * Coils (read-write digital outputs)

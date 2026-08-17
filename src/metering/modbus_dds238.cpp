@@ -2,6 +2,7 @@
 #include <TimeLib.h>
 #include <core/data_model.h>
 #include <metering/DTMPowerCache.h>
+#include <time_utils.h>
 #define PAUSE_ON_RAMP_LEVELS 30000
 
 /*
@@ -51,7 +52,7 @@ void Modbus_DDS238::poll() {
         last_reading.reactive_power = read_modbus_value(rREACTIVE_POWER)/1000;
         last_reading.power_factor = read_modbus_value(rPOWER_FACTOR)/1000;
         last_reading.frequency = read_modbus_value(rFREQUENCY)/100;
-        last_reading.timestamp_last_report = now();
+        last_reading.timestamp_last_report = utc_now();
         last_reading.metadata = read_modbus_value(rMETADATA);
 
         //TODO add energy used totalizer calculations 
