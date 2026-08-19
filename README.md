@@ -22,7 +22,7 @@ Active build flags (see `platformio.ini`): `ENABLE_OLED_DISPLAY`, `ENABLE_WIFI`,
 
 | Subsystem | Status | Notes |
 |---|---|---|
-| WiFi / MQTT | ✅ Working | Connects to broker, publishes all topics |
+| WiFi / MQTT | ✅ Working (bench) | Connects to a single hardcoded broker (`MQTT_SERVER` in `secrets.h`/`config.h`), publishes all topics. Production needs a per-LV-feeder filtering EMS/DER-aware relay proxy broker (primary+secondary) — not yet implemented, see Framework & Networking TODO below. |
 | ATM90E32 6-Ch SPI Meter | ⚠️ Implemented / Not field-tested | New driver; CS pins GPIO 33/34 are placeholders — verify against board schematic before use. See known issue below. |
 | SHT20 Temp/Humidity (Modbus) | ❌ Timeout | SoftwareSerial / WiFi interrupt contention. See known issue below. |
 | DDS238 / CHD130 / DDSU666 (Modbus) | ⚠️ Supported, inactive | Addresses corrected to `0x01–0x03`. Enable by setting `METER_TYPE_DDS238` (or variant) in `platformio.ini`. |
@@ -307,6 +307,11 @@ This development kit includes a connection for AC power input. When working with
 - StreetPoleEMS MESH distributed intelligence Pub/Sub networking
 - Linux Aggregation FLEXMEASURES policy layering export policy enforcement schedules to ESP32S3 EMS - see proposed HLD in Google docs
 - EMS MESH networking to N:1 StreetPoleEMS Linux Node Aggregator with distributed AI Energy Policy, N=10~100
+- **TODO (must solve):** per-LV-feeder filtering MQTT relay proxy — a primary + secondary, EMS/DER-aware local
+  broker at each feeder that brokers StreetPoleEMS/LeadEMS/tenant subpanel pub/sub locally and relays
+  filtered/aggregated telemetry upstream to the GroupLead EMS policy node. Firmware currently only targets a
+  single hardcoded `MQTT_SERVER` (see `include/core/config.h` / `secrets.h`) — no feeder-local broker or
+  primary/secondary failover yet.
 
 #### Metering Plugins
 - IVY Metering Bidirectional AC/DC powerflow RCD and RVD leakage modbus monitoring, alarm lines detection

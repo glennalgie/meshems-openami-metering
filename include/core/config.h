@@ -12,12 +12,16 @@
 #define MQTT_TOPIC              "openami" // "openami/StreetPoleEMS_<EMSid>"
 //#define MQTT_TOPIC              "nesl"
 #define MQTT_PUBLISH_INTERVAL   30000
-// Local Mosquitto broker on this PC's WiFi IP (anonymous connection). Override in secrets.h.
+// Local Mosquitto broker on this PC's WiFi IP (anonymous connection). Override in secrets.h such as for public broker or shiftr.io
 #ifndef MQTT_SERVER
 #define MQTT_SERVER             "10.0.0.116"              // local PC running Mosquitto
 #endif
-#define MQTT_USER               ""                        // empty = anonymous (local Mosquitto)
+#ifndef MQTT_USER
+#define MQTT_USER               ""                        // empty = anonymous (local Mosquitto IF the secrets.h file is not present)
+#endif
+#ifndef MQTT_PW
 #define MQTT_PW                 ""
+#endif
 //#define MQTT_SERVER             "public.cloud.shiftr.io"  //"test.mosquitto.org"
 //#define MQTT_USER               "public"                  // leave empty for test.mosquitto.org
 //#define MQTT_PW                 "public"                  // leave empty for test.mosquitto.org

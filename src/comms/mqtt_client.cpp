@@ -50,7 +50,13 @@ Front of the Meter Use Case
 
 TODO - soon is to breakup this mqtt client as its taking on mqtt higher level separated roles for a designated LVFeeder LeadEMS vs a regular policy enforcing building
    or streetpoleEMS edge of a building energy subsystem specifc policy enforcer or streetpoleEMS LVfeeder EMS policy enforcer role at multitenant subpanel
-TODO perhaps can decouple the higher level topics telemetry formating of the key "openami" schema framework separate from the basic emchanical operation of 
+TODO - MUST SOLVE: production deployment is not a single fixed MQTT_SERVER (see config.h). Each LV feeder needs its
+   own filtering, EMS+DER-aware MQTT relay proxy/broker (primary + secondary for no-single-point-of-failure), local
+   to the feeder, that locally brokers StreetPoleEMS/LeadEMS/tenant subpanel pub/sub and selectively relays
+   filtered/aggregated topics upstream to the Java Linux GroupLead EMS policy node. This client currently only
+   supports one hardcoded broker address/credential pair — connect/reconnect logic here will need to grow
+   primary/secondary broker failover once the feeder-level relay proxy exists.
+TODO perhaps can decouple the higher level topics telemetry formating of the key "openami" schema framework separate from the basic emchanical operation of
 establishing and encode and decode json documents and mqtt operations of a 2way mqtt monitor and control plane framework. key openami subtopics
    o  EMS-3phase energy reports actionable telemetry
    o  EMS-harmonics energy actionable telemetry
@@ -177,6 +183,7 @@ void generateTopics() {
 // -------------------------------------------------------------------
 boolean mqtt_connect()
 {
+  transportClient.setTimeout(5000); // WAN brokers (e.g. shiftr.io) need more than the 1000ms default
   Serial.printf("MQTT Connecting...timeout in:%d\r\n", transportClient.getTimeout());
   // todo ENABLE_DEBUG_MQTT=1;  // allow for 1883 or 8883 encrypted telemetry and command and control
   if (transportClient.connect(MQTT_SERVER, 1883) != 1) //8883 for TLS
@@ -186,7 +193,6 @@ boolean mqtt_connect()
      return (0);
   }
 
-  //transportClient.setTimeout(60);//(MQTT_TIMEOUT);
   mqttclient.setSocketTimeout(6);//MQTT_TIMEOUT);
   if (!mqttclient.setBufferSize(MAX_DATA_LEN + 200)) {
     Serial.printf("MQTT: failed to resize buffer to %u bytes\n", (unsigned)(MAX_DATA_LEN + 200));
