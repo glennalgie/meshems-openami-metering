@@ -108,8 +108,8 @@
 
 
 \usepackage[table,dvipsnames]{xcolor}
-\usepackage[T1]{fontenc}
-\usepackage[default]{lato}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
 \usepackage{graphicx}
 \usepackage{tabularx}
 \usepackage{array}
@@ -222,9 +222,9 @@
   {\fontsize{22}{24}\selectfont\bfseries\color{tpdark}10\color{tpteal}POWER}}
 \end{minipage}\hfill
 \begin{minipage}[c]{0.43\textwidth}
-\raggedleft\footnotesize\textcolor{tpgray}{PRODUCT DATASHEET}\\[3pt]
-{\large\bfseries\color{tpdark}X\textcolor{tporange}{-}EMS}\ {\footnotesize\textcolor{tpgray}{SERIES}}\\[1pt]
-{\footnotesize\textcolor{tpgray}{by New Energy Solutions Lab}}
+\raggedleft
+\IfFileExists{nesl_logo.png}{\includegraphics[height=0.75cm]{nesl_logo.png}\\[3pt]}{}
+{\footnotesize\textcolor{tpgray}{PRODUCT DATASHEET}}\ \ {\bfseries\color{tpdark}X\textcolor{tporange}{-}EMS}\ {\footnotesize\textcolor{tpgray}{SERIES}}
 \end{minipage}
 
 \vspace{3pt}
@@ -344,8 +344,8 @@ Energy meters / relay & Single-phase Modbus meters (bidirectional kWh) \sep 8-ch
 Sensors / networking & Temp / humidity sensor \sep Ethernet \sep WiFi / BLE \\
 \addlinespace[2pt]
 \spechead{POWER \& ENCLOSURE}
-Operating voltage & 5 V DC --- USB-C or screw terminals \tbd \\
-Power / dimensions & \tbd \\
+Operating voltage & 5 V DC --- USB-C or screw terminals \sep or 4.5\,--\,20 V DC \sep or 8\,--\,12 V AC (SELV) \\
+Power / dimensions & 85 $\times$ 55 mm \sep or Raspberry Pi HAT form factor \\
 \addlinespace[2pt]
 \spechead{STANDARDS \& POSITIONING}
 Grid position & Behind-the-meter (BTM) \sep building / commercial rooftop minigrid \\
@@ -354,7 +354,6 @@ Capabilities & EV V2X \sep multitenant solar / wind / storage \sep mains balanci
 
 \vspace{8pt}
 {\footnotesize\textcolor{tpgray}{\itshape Customizable with added hardware modules and open or licensed code stacks.
-Specifications are preliminary; items marked \tbd\ are to be confirmed on the production unit.
 BUILD-EMS is an open-source X-EMS product supplied by New Energy Solutions Lab for 10Power.}}
 
 
