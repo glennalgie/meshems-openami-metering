@@ -1,0 +1,209 @@
+---
+format:
+  pdf:
+    pdf-engine: pdflatex
+    documentclass: article
+    geometry:
+      - paper=letterpaper
+      - top=1.3cm
+      - bottom=1.7cm
+      - left=1.5cm
+      - right=1.5cm
+    fontsize: 10pt
+    keep-tex: true
+header-includes: |
+  \usepackage[table,dvipsnames]{xcolor}
+  \usepackage[T1]{fontenc}
+  \usepackage[default]{lato}
+  \usepackage{graphicx}
+  \usepackage{tabularx}
+  \usepackage{array}
+  \usepackage{enumitem}
+  \usepackage{tcolorbox}
+  \tcbuselibrary{skins}
+  \usepackage{fancyhdr}
+
+  % ----- 10Power brand palette (sampled from official logo) -----
+  \definecolor{tpteal}{HTML}{56A8A3}
+  \definecolor{tporange}{HTML}{E08226}
+  \definecolor{tpdark}{HTML}{55626F}
+  \definecolor{tpgray}{HTML}{6B7886}
+  \definecolor{tplight}{HTML}{EAF4F3}
+
+  % ----- layout -----
+  \setlength{\parindent}{0pt}
+  \setlength{\parskip}{4pt}
+  \newcommand{\sep}{\,\textcolor{tpgray}{\textbar}\,}
+
+  % ----- arrow bullet list -----
+  \newlist{arrows}{itemize}{1}
+  \setlist[arrows]{leftmargin=1.3em,itemsep=2.5pt,topsep=2pt,parsep=0pt,
+    label={\textcolor{tporange}{\small$\blacktriangleright$}}}
+
+  % ----- feature card -----
+  \newtcolorbox{featbox}[1]{
+    colback=tplight, colframe=tpteal, boxrule=0.6pt, arc=2pt,
+    left=7pt, right=7pt, top=4pt, bottom=5pt,
+    title={#1}, fonttitle=\bfseries, coltitle=white, colbacktitle=tpteal}
+
+  % ----- spec-table helpers -----
+  \newcommand{\spechead}[1]{\multicolumn{2}{@{}l@{}}{%
+    \cellcolor{tpteal}\textcolor{white}{\bfseries\strut\quad #1}}\\}
+  \newcommand{\tbd}{\textcolor{tporange}{\itshape[to confirm]}}
+
+  % ----- footer -----
+  \pagestyle{fancy}
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.4pt}
+  \fancyfoot[L]{\footnotesize\textcolor{tpgray}{\textcopyright\ 2026 New Energy Solutions Lab LLC \sep 10Power}}
+  \fancyfoot[C]{\footnotesize\textcolor{tpgray}{BUILD-EMS Datasheet (DRAFT)}}
+  \fancyfoot[R]{\footnotesize\textcolor{tpgray}{\thepage}}
+---
+
+```{=latex}
+% ===================== PAGE 1 : HERO =====================
+\thispagestyle{fancy}
+
+% ---- brand header ----
+\begin{minipage}[c]{0.55\textwidth}
+\IfFileExists{TEN-POWER-LOGO-1.png}{%
+  \includegraphics[height=1.25cm]{TEN-POWER-LOGO-1.png}}{%
+  {\fontsize{22}{24}\selectfont\bfseries\color{tpdark}10\color{tpteal}POWER}}
+\end{minipage}\hfill
+\begin{minipage}[c]{0.43\textwidth}
+\raggedleft\footnotesize\textcolor{tpgray}{PRODUCT DATASHEET}\\[3pt]
+{\large\bfseries\color{tpdark}X\textcolor{tporange}{-}EMS}\ {\footnotesize\textcolor{tpgray}{SERIES}}\\[1pt]
+{\footnotesize\textcolor{tpgray}{by New Energy Solutions Lab}}
+\end{minipage}
+
+\vspace{3pt}
+\textcolor{tporange}{\rule{\textwidth}{2pt}}
+\vspace{9pt}
+
+% ---- title + tagline ----
+{\fontsize{30}{32}\selectfont\bfseries\color{tpdark}BUILD\textcolor{tpteal}{-}EMS}\\[3pt]
+{\large\color{tpteal}\itshape Behind-the-Meter Control for Rooftop Solar, Wind, Storage \& EV --- Multi-Tenant Ready}
+
+\vspace{10pt}
+
+% ---- two columns ----
+\begin{minipage}[t]{0.60\textwidth}
+\IfFileExists{build-ems.jpg}{%
+  \begin{center}\includegraphics[width=0.96\linewidth]{build-ems.jpg}\end{center}}{%
+  \begin{center}\setlength{\fboxsep}{0pt}\fcolorbox{tpgray}{tplight}{%
+    \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: BUILD-EMS / NESL 886B board ]}}\end{center}}
+
+\vspace{7pt}
+{\small
+Deploying EV charge/discharge with rooftop solar PV and wind on an existing building?
+\textbf{BUILD-EMS} is the open-source behind-the-meter controller that integrates
+\textbf{bidirectional DC/AC inverters}, multi-tenant ``plug-in solar'', and EV infrastructure
+into one balanced building minigrid --- enforcing multi-zone energy policy while protecting
+the mains.
+
+\smallskip
+\textbf{\color{tpdark}What Sets BUILD-EMS Apart:}
+\begin{arrows}
+\item \textbf{Bidirectional \& Inverter-Ready} : coordinates DC/AC bidirectional inverters and
+converters for solar PV, wind and battery, with EV charge and discharge (V2X).
+\item \textbf{Multi-Tenant ``Plug-in Solar''} : partitions shared rooftop generation and storage
+across tenants with per-zone, time-of-day energy policies.
+\item \textbf{Mains-Protective} : balances the building mains and responds to grid-peak DERMS
+events without exceeding the service limit.
+\item \textbf{Open-Source Hardware} : released under CERN-OHL-S v2 --- schematics, board files
+and firmware published on GitHub (meshEMS / X-EMS).
+\item \textbf{Field-Serviceable} : built from open, off-the-shelf commodity modules, snap-in
+mounted for fast in-country assembly and repair.
+\end{arrows}
+
+\smallskip
+BUILD-EMS turns a building rooftop into a coordinated, multi-tenant minigrid --- maximizing
+solar, wind and EV flexibility while keeping the mains within limits.
+}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.37\textwidth}
+\begin{featbox}{Intelligent}
+\begin{arrows}
+\item Multi-zone, time-of-day energy policy
+\item Mains balancing \& DERMS peak response
+\item EV charge / discharge (V2X) scheduling
+\end{arrows}
+\end{featbox}
+\vspace{7pt}
+\begin{featbox}{Interoperable}
+\begin{arrows}
+\item Bidirectional DC/AC inverters (PV / wind / battery)
+\item SunSpec DER + Modbus / CAN
+\item Multitenant sub-metering \& EVSE
+\end{arrows}
+\end{featbox}
+\vspace{7pt}
+\begin{featbox}{Resilient}
+\begin{arrows}
+\item Local policy enforcement, cloud-optional
+\item Per-tenant energy allocation
+\item Open meshEMS platform
+\end{arrows}
+\end{featbox}
+\end{minipage}
+
+\vspace{11pt}
+\setlength{\fboxsep}{6pt}%
+\colorbox{tpdark}{\makebox[\dimexpr\textwidth-2\fboxsep][l]{%
+\small\color{white}\textbf{New Energy Solutions Lab}\sep NewEnergySolutionsLab.com%
+\hfill An NESL product for 10Power \sep Clean Growth.}}
+
+% ===================== PAGE 2 : SPECIFICATIONS =====================
+\clearpage
+\thispagestyle{fancy}
+
+{\fontsize{18}{20}\selectfont\bfseries\color{tpdark}Product Specifications}\hfill
+\IfFileExists{TEN-POWER-LOGO-1.png}{\raisebox{-0.28\height}{\includegraphics[height=0.72cm]{TEN-POWER-LOGO-1.png}}}{\footnotesize\textcolor{tpgray}{BUILD-EMS}}\\[3pt]
+\textcolor{tporange}{\rule{\textwidth}{1.5pt}}
+\vspace{5pt}
+
+{\small
+\renewcommand{\arraystretch}{1.1}
+\setlength{\tabcolsep}{6pt}
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\color{tpdark}\raggedright\arraybackslash}p{0.30\textwidth} >{\color{tpdark}\arraybackslash}X@{}}
+\spechead{PRODUCT}
+Product name & BUILD-EMS (10Power X-EMS, supplied by NESL) \\
+Model / PCB & NESL EMS Controller PCB 886B (shared X-EMS platform) \\
+Firmware & meshEMS / OpenAMI metering (open source, $\sim$50k LOC middleware) \\
+License \& source & Hardware: CERN-OHL-S v2 \sep Repository: GitHub, meshEMS / X-EMS \\
+Serviceability & Open, off-the-shelf commodity modules \sep snap-in mounted for fast in-country assembly and repair \\
+\addlinespace[2pt]
+\spechead{COMPUTE}
+Processor & Dual-core 32-bit MCU @ 240 MHz \sep WiFi + Bluetooth LE \\
+Memory & 16 MB Flash + 8 MB PSRAM \\
+\addlinespace[2pt]
+\spechead{ENERGY MANAGEMENT}
+Supported DER & Solar PV \sep wind \sep battery, via bidirectional DC/AC inverters / converters \\
+EV infrastructure & EVSE charge \& discharge (V2X) \sep per-tenant charging needs \\
+Energy policy & Multi-zone time-of-day policies \sep per-channel kW / kWh limits \sep multitenant allocation \sep DERMS response \\
+\addlinespace[2pt]
+\spechead{ASSET COMMUNICATION}
+Serial buses & 2$\times$ RS-485 Modbus: EV-charger (EVC) + sensor/DTM ports \sep 1$\times$ CAN 2.0 \\
+On-board metering & SPI poly-phase metering, up to 6 CT channels \sep bidirectional (import/export) \\
+Local I/O & 2$\times$ onboard SSR outputs \sep door-switch input \sep 2 analog buttons \\
+\addlinespace[2pt]
+\spechead{SUPPORTED MODULES \& SENSORS (out of the box)}
+DER \& inverters & SunSpec models 1 / 11 / 213 (bidirectional inverters \& meters) \\
+Energy meters / relay & Single-phase Modbus meters (bidirectional kWh) \sep 8-ch I\textsuperscript{2}C SSR bank \\
+Sensors / networking & Temp / humidity sensor \sep Ethernet \sep WiFi / BLE \\
+\addlinespace[2pt]
+\spechead{POWER \& ENCLOSURE}
+Operating voltage & 5 V DC --- USB-C or screw terminals \tbd \\
+Power / dimensions & \tbd \\
+\addlinespace[2pt]
+\spechead{STANDARDS \& POSITIONING}
+Grid position & Behind-the-meter (BTM) \sep building / commercial rooftop minigrid \\
+Capabilities & EV V2X \sep multitenant solar / wind / storage \sep mains balancing \& DERMS \\
+\end{tabularx}}
+
+\vspace{8pt}
+{\footnotesize\textcolor{tpgray}{\itshape Customizable with added hardware modules and open or licensed code stacks.
+Specifications are preliminary; items marked \tbd\ are to be confirmed on the production unit.
+BUILD-EMS is an open-source X-EMS product supplied by New Energy Solutions Lab for 10Power.}}
+```
