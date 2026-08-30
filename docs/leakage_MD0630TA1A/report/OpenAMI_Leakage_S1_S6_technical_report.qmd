@@ -519,6 +519,42 @@ absolute-value only (no direction, IEC 62955) and exposes alarms only on its har
 \end{keybox}
 ```
 
+# MQTT cloud publishing: shiftr.io live demo
+
+**Objective.** Show that the leakage telemetry validated above is not confined to the bench: the same
+`rcm_ac_mA` / `rcm_dc_mA` readings publish live, end to end, to a public cloud MQTT broker
+(`public.cloud.shiftr.io`), the same pattern a field deployment would use to reach a remote dashboard.
+
+**Method.** With the AC bench rig of the previous section connected, the number of turns through the CT
+window was varied live while watching the broker in MQTT Explorer, and the loop was deliberately opened
+between steps. The open-loop step is an integrity check, not a fault: a reading that is really tracking
+induced current must return to exactly 0.00 mA the instant the loop opens, so every zero seen below is
+intentional. Varying the turn count re-scales the reading, which lets the same live session probe several
+points on the range instead of a single fixed value.
+
+![AC leakage read live on the public broker across turn counts, each step bounded by a deliberate open-loop zero-check; one step lands at 36.83 mA, above the 30 mA alarm threshold.](shiftr_demo_media/demo_02_threshold_cross.png){#fig-shiftr-demo width=95%}
+
+**Findings.**
+
+- The readings reach the public broker live and track the induced current exactly as on the bench: each
+  deliberate disconnect returns a clean 0.00 mA, and each turn-count change lands at a different, repeatable
+  value, including one step above the 30 mA AC threshold (36.83 mA).
+- The bench ESP32-S3's WiFi radio is currently damaged (boot-loops on `WiFi.mode(WIFI_STA)`), so this run
+  bridged the board's serial output to the broker with a PC-side gateway script rather than the board's own
+  WiFi/MQTT client; the MQTT payload and topic tree are otherwise identical to a direct publish, and the
+  bridge's publish/echo round trip was captured in the terminal log as further proof of the link.
+- Full walkthrough, all captures and the gateway terminal log: see the companion
+  *Street-EMS shiftr.io demo* report in the same `report/` folder.
+
+```{=latex}
+\begin{keybox}[Cloud publishing result]
+Leakage telemetry reaches a public MQTT broker live, with the reading tracking real induced current end
+to end (clean zero on every deliberate disconnect, repeatable values across turn counts, 30 mA threshold
+crossing reproduced off the bench). Remaining: repeat once the board's own WiFi/Ethernet is available, in
+place of the PC gateway bridge.
+\end{keybox}
+```
+
 # Results summary
 
 @tbl-results collects the verification status of each capability. It distinguishes *code-proven*
