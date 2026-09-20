@@ -92,7 +92,7 @@ header-includes: |
 \IfFileExists{street-ems.jpg}{%
   \begin{center}\includegraphics[width=0.96\linewidth]{street-ems.jpg}\end{center}}{%
   \begin{center}\setlength{\fboxsep}{0pt}\fcolorbox{tpgray}{tplight}{%
-    \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: STREET-EMS / NESL 886B board ]}}\end{center}}
+    \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: STREET-EMS / NESL 865B board ]}}\end{center}}
 
 \vspace{7pt}
 {\small
@@ -168,7 +168,7 @@ and coordinates DERs --- bringing intelligent, balanced power to the village min
 \begin{tabularx}{\textwidth}{@{}>{\bfseries\color{tpdark}\raggedright\arraybackslash}p{0.30\textwidth} >{\color{tpdark}\arraybackslash}X@{}}
 \spechead{PRODUCT}
 Product name & STREET-EMS (10Power X-EMS, supplied by NESL) \\
-Model / PCB & NESL EMS Controller PCB 886B \\
+Model / PCB & NESL EMS Controller PCB 865B \\
 Firmware & meshEMS / OpenAMI metering (open source, $\sim$50k LOC middleware) \\
 License \& source & Hardware: CERN-OHL-S v2 \sep Repository: GitHub, STREET-EMS \\
 Serviceability & Open, off-the-shelf commodity modules \sep snap-in mounted for fast in-country assembly and repair \\

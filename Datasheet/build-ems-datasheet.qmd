@@ -92,7 +92,7 @@ header-includes: |
 \IfFileExists{build-ems.jpg}{%
   \begin{center}\includegraphics[width=0.96\linewidth]{build-ems.jpg}\end{center}}{%
   \begin{center}\setlength{\fboxsep}{0pt}\fcolorbox{tpgray}{tplight}{%
-    \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: BUILD-EMS / NESL 886B board ]}}\end{center}}
+    \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: BUILD-EMS / NESL 865B board ]}}\end{center}}
 
 \vspace{7pt}
 {\small
@@ -169,7 +169,7 @@ solar, wind and EV flexibility while keeping the mains within limits.
 \begin{tabularx}{\textwidth}{@{}>{\bfseries\color{tpdark}\raggedright\arraybackslash}p{0.30\textwidth} >{\color{tpdark}\arraybackslash}X@{}}
 \spechead{PRODUCT}
 Product name & BUILD-EMS (10Power X-EMS, supplied by NESL) \\
-Model / PCB & NESL EMS Controller PCB 886B (shared X-EMS platform) \\
+Model / PCB & NESL EMS Controller PCB 865B (shared X-EMS platform) \\
 Firmware & meshEMS / OpenAMI metering (open source, $\sim$50k LOC middleware) \\
 License \& source & Hardware: CERN-OHL-S v2 \sep Repository: GitHub, meshEMS / X-EMS \\
 Serviceability & Open, off-the-shelf commodity modules \sep snap-in mounted for fast in-country assembly and repair \\
