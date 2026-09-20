@@ -89,8 +89,8 @@ header-includes: |
 
 % ---- two columns ----
 \begin{minipage}[t]{0.60\textwidth}
-\IfFileExists{dtm-pcb.jpg}{%
-  \begin{center}\includegraphics[width=0.99\linewidth,height=5.3cm,keepaspectratio]{dtm-pcb.jpg}\end{center}}{%
+\IfFileExists{dtm-ems-hero.jpg}{%
+  \begin{center}\includegraphics[width=0.99\linewidth,height=5.7cm,keepaspectratio]{dtm-ems-hero.jpg}\end{center}}{%
   \begin{center}\setlength{\fboxsep}{0pt}\fcolorbox{tpgray}{tplight}{%
     \parbox[c][4.2cm][c]{0.94\linewidth}{\centering\color{tpgray}\itshape[ Product image: NESL EMS PCB on stand-offs ]}}\end{center}}
 
@@ -175,7 +175,7 @@ feeder-wide microgrid, on standards you own.
 \vspace{5pt}
 
 {\small
-\renewcommand{\arraystretch}{1.0}
+\renewcommand{\arraystretch}{0.93}
 \setlength{\tabcolsep}{6pt}
 \begin{tabularx}{\textwidth}{@{}>{\bfseries\color{tpdark}\raggedright\arraybackslash}p{0.30\textwidth} >{\color{tpdark}\arraybackslash}X@{}}
 \spechead{PRODUCT}
