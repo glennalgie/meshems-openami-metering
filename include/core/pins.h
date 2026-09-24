@@ -179,26 +179,59 @@
     #define CAN0_INT    GPIO_NUM_1  // MCP2515 interrupt output (active-low)
 
     // ==================== ATM90E32 6-CHANNEL SPI METER ====================
-    // The ATM90E32 shares the same SPI bus as the OLED/SD (MOSI=11, CLK=12,
-    // MISO=13) but requires unique chip-select pins per IC.
+    // This firmware must run unmodified on EVPE hardware, so the whole SPI
+    // pin map below is aligned to the EVPE deployment.
     //
-    // CS pins below are PLACEHOLDER values — verify and update to match the
-    // actual wiring on your board before enabling METER_TYPE_ATM90E32.
-    // GPIO 33 and 34 are used here as they are free on the 865B pinout.
+    // SPI BUS: EVPE calls a bare SPI.begin() with no arguments (EVPE
+    // src/main.cpp:165,237), so it runs on the arduino-esp32 ESP32-S3 variant
+    // defaults declared in variants/esp32s3/pins_arduino.h:
+    //     SS=10, MOSI=11, MISO=13, SCK=12
+    // Those are byte-for-byte what this board already used, so the bus pins are
+    // unchanged and SD_CS=10 also matches. EVPE defines no explicit
+    // SD_MOSI/SD_MISO/SD_SCLK for the S3 (its lib/sdcard/sdcard.h blocks are
+    // NODEMCU / DEVKITV1 / HELTEC only), so there is nothing further to port:
+    // both projects are on the same physical bus.
     //
-    // For add-on boards (ATM90E32_NUM_BOARDS >= 2), define additional CS pins:
-    //   ATM90E32_IC1_CS_1, ATM90E32_IC2_CS_1   (board 2)
-    //   ATM90E32_IC1_CS_2, ATM90E32_IC2_CS_2   (board 3)
-    // etc., and increase ATM90E32_NUM_BOARDS in platformio.ini accordingly.
-    // TODO(PCB 865B.4 schematic): ATM90E32_IC2_CS is currently GPIO18, but the
-    // schematic labels GPIO18 as OLED-DC. For the first ATM90E32 add-on pair,
-    // the schematic appears to map CS1-1 -> GPIO15 and CS1-2 -> GPIO16, so IC2
-    // CS likely needs GPIO16 before OLED is enabled. Do not change this without
-    // board-level acknowledgement.
-    #define ATM90E32_MOSI        GPIO_NUM_11  // Shared SPI bus (OLED/SD)
-    #define ATM90E32_MISO        GPIO_NUM_13  // Shared SPI bus (OLED/SD)
-    #define ATM90E32_CLK         GPIO_NUM_12  // Shared SPI bus (OLED/SD)
-    #define ATM90E32_IC1_CS      GPIO_NUM_15  // Verifed by Liam May 1 2026
-    #define ATM90E32_IC2_CS      GPIO_NUM_18  // Verifed by Liam May 1 2026
+    // Keep these three defines in sync with SD_*/ETH_*/DISPLAY_* above; they
+    // all describe the one shared bus, and the CS lines are what separate the
+    // devices on it.
+    #define ATM90E32_MOSI        GPIO_NUM_11  // Shared SPI bus (OLED/SD/ETH)
+    #define ATM90E32_MISO        GPIO_NUM_13  // Shared SPI bus (OLED/SD/ETH)
+    #define ATM90E32_CLK         GPIO_NUM_12  // Shared SPI bus (OLED/SD/ETH)
+
+    // ---- Chip selects: 2 ICs per board, up to 3 stacked CircuitSetup boards ----
+    // Values adopted from the EVPE deployment (EVPE include/pins.h, ESP32-S3
+    // branch), which runs this exact 3-board stack in the field. The comment on
+    // each line gives the number silk-screened on the CircuitSetup board, which
+    // does NOT match the ESP32 GPIO it is wired to.
+    //
+    // Board 1 = Phase A/1, Board 2 = Phase B/2, Board 3 = Phase C/3.
+    // Set ATM90E32_NUM_BOARDS (1-3) in platformio.ini; only the first
+    // ATM90E32_NUM_BOARDS pairs are referenced by the driver.
+    #define ATM90E32_IC1_CS      GPIO_NUM_15  // board 1 CT1-3  (cs.us "CS")
+    #define ATM90E32_IC2_CS      GPIO_NUM_16  // board 1 CT4-6  (cs.us "CS2")
+    #define ATM90E32_IC1_CS_1    GPIO_NUM_47  // board 2 CT1-3  (cs.us pin 0)
+    #define ATM90E32_IC2_CS_1    GPIO_NUM_2   // board 2 CT4-6  (cs.us pin 16)
+    #define ATM90E32_IC1_CS_2    GPIO_NUM_21  // board 3 CT1-3  (cs.us pin 15)
+    #define ATM90E32_IC2_CS_2    GPIO_NUM_19  // board 3 CT4-6  (cs.us pin 17)
+
+    // NOTE(IC2 board 1): this was GPIO18 and is now GPIO16, which resolves the
+    // long-standing conflict flagged below and in README.md — GPIO18 is OLED-DC
+    // on the 865B.4 schematic. EVPE independently uses 16 for the same IC, so
+    // the schematic's "CS1-2 -> GPIO16" reading is confirmed. GPIO18 is now free
+    // for OLED-DC, so ENABLE_OLED_DISPLAY and METER_TYPE_ATM90E32 no longer
+    // collide on a single board.
+    //
+    // CONFLICTS introduced only at ATM90E32_NUM_BOARDS = 3:
+    //   GPIO21 (board 3 IC1) collides with MD0630_ALARM_FAULT_PIN above.
+    //           ENABLE_LEAKAGE_MD0630 + LEAKAGE_ALARM_SENSE cannot be used with
+    //           a 3-board stack without moving one of them. A compile-time
+    //           #error in meter_atm90e32.h enforces this.
+    //   GPIO19  (board 3 IC2) is USB D-. Native USB CDC is already unusable on
+    //           this board (GPIO20 is I2C_SSR_SCL), and the console runs on
+    //           UART0 (43/44), so this is safe here - but do not enable
+    //           ARDUINO_USB_CDC_ON_BOOT with a 3-board stack.
+    // At 2 boards, GPIO2 and GPIO47 are consumed; both were otherwise-free
+    // spares, so plan any new peripheral around that.
 #endif
 

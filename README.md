@@ -36,9 +36,11 @@ Active build flags (see `platformio.ini`): `ENABLE_OLED_DISPLAY`, `ENABLE_WIFI`,
 
 The schematic review found that OLED wiring in `include/core/pins.h` appears correct for `BOARD_VER_V3`: `OLED-CS` -> GPIO17, `OLED-DC` -> GPIO18, `OLED-RST` -> GPIO8, `CLK` -> GPIO12, and `MOSI` -> GPIO11.
 
-Do not enable OLED with the current ATM90E32 pin map yet. `ATM90E32_IC2_CS` is currently set to GPIO18, but the schematic labels GPIO18 as `OLED-DC`. For the first ATM90E32 add-on pair, the schematic appears to map `CS1-1` -> GPIO15 and `CS1-2` -> GPIO16, so `ATM90E32_IC2_CS` likely needs GPIO16 after board-level acknowledgement.
+**RESOLVED.** `ATM90E32_IC2_CS` was GPIO18, which collided with `OLED-DC`. It is now GPIO16, matching both the schematic's `CS1-2` -> GPIO16 reading and the EVPE hardware map (`EVPE/include/pins.h`, `CS2_BOARD1 16`), which runs this stack in the field. GPIO18 is free for `OLED-DC` again, so `ENABLE_OLED_DISPLAY` and `METER_TYPE_ATM90E32` no longer conflict on a single board.
 
-CAN also needs revalidation before enabling: current `CAN0_SI` = GPIO16 overlaps the likely ATM90E32 `CS1-2`, and `CAN0_SCK` = GPIO17 overlaps `OLED-CS`.
+CAN still needs revalidation before enabling: `CAN0_SI` = GPIO16 now overlaps `ATM90E32_IC2_CS`, and `CAN0_SCK` = GPIO17 overlaps `OLED-CS`. CAN is disabled and needs a re-pin regardless.
+
+Pin cost of stacking boards: 2 boards additionally claims GPIO47 and GPIO2; 3 boards additionally claims GPIO21 and GPIO19. GPIO21 is `MD0630_ALARM_FAULT_PIN`, so a 3-board stack and `LEAKAGE_ALARM_SENSE` are mutually exclusive — enforced by an `#error` in `include/metering/meter_atm90e32.h`.
 
 ---
 

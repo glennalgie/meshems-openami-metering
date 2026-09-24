@@ -51,11 +51,30 @@
 // Override in platformio.ini with -DATM90E32_NUM_BOARDS=N if using add-ons.
 // --------------------------------------------------------------------------
 #ifndef ATM90E32_NUM_BOARDS
-#define ATM90E32_NUM_BOARDS 1
+#define ATM90E32_NUM_BOARDS 3
+#endif
+
+// Hardware ceiling: pins.h carries exactly three board pairs' chip selects,
+// matching the EVPE 3-stack. The CS tables are always declared at this size so
+// the driver needs no #ifdef ladder; only the first ATM90E32_NUM_BOARDS entries
+// are ever touched.
+#define ATM90E32_MAX_BOARDS 3
+
+#if (ATM90E32_NUM_BOARDS < 1) || (ATM90E32_NUM_BOARDS > ATM90E32_MAX_BOARDS)
+#error "ATM90E32_NUM_BOARDS must be 1, 2 or 3 (see pins.h for the CS map)."
+#endif
+
+// Board 3 IC1 uses GPIO21, which is also MD0630_ALARM_FAULT_PIN. Catch the
+// clash at compile time rather than with two drivers fighting over the pin.
+#if (ATM90E32_NUM_BOARDS >= 3) && defined(LEAKAGE_ALARM_SENSE)
+#error "ATM90E32_NUM_BOARDS=3 needs GPIO21, which LEAKAGE_ALARM_SENSE uses for MD0630_ALARM_FAULT_PIN. Disable one, or remap MD0630_ALARM_FAULT_PIN in pins.h."
 #endif
 
 // Total CT channels across all boards.
 #define ATM90E32_NUM_CHANNELS (ATM90E32_NUM_BOARDS * 6)
+
+// Two ATM90E32 ICs per board; index into the per-IC calibration tables.
+#define ATM90E32_NUM_ICS (ATM90E32_NUM_BOARDS * 2)
 
 // --------------------------------------------------------------------------
 // Calibration defaults (see file header for override instructions)
@@ -93,6 +112,53 @@
 #endif
 
 // --------------------------------------------------------------------------
+// Per-IC voltage gain
+// --------------------------------------------------------------------------
+// Each CircuitSetup board in a stack has its OWN 9 V AC reference transformer,
+// so one global voltage gain cannot be right for more than one board. The
+// ATM90E32_VOLTAGE_GAIN above is the fallback; override any individual IC to
+// calibrate a stack properly. Index order is IC1,IC2 of board 1, then board 2,
+// then board 3 -- i.e. the same order as readings[] groups channels.
+//
+// Measured EVPE values (MYRRA 44122 230V 9VAC, 60 Hz), kept here as a worked
+// example of the spread you should expect between boards:
+//     board 1: 10885    board 2: 10013    board 3: 10116
+// Calibrate per unit: new_gain = (reference_meter_V / measured_V) * old_gain.
+#ifndef ATM90E32_UGAIN_IC0
+#define ATM90E32_UGAIN_IC0 ATM90E32_VOLTAGE_GAIN   // board 1, IC1 (CT1-3)
+#endif
+#ifndef ATM90E32_UGAIN_IC1
+#define ATM90E32_UGAIN_IC1 ATM90E32_VOLTAGE_GAIN   // board 1, IC2 (CT4-6)
+#endif
+#ifndef ATM90E32_UGAIN_IC2
+#define ATM90E32_UGAIN_IC2 ATM90E32_VOLTAGE_GAIN   // board 2, IC1 (CT7-9)
+#endif
+#ifndef ATM90E32_UGAIN_IC3
+#define ATM90E32_UGAIN_IC3 ATM90E32_VOLTAGE_GAIN   // board 2, IC2 (CT10-12)
+#endif
+#ifndef ATM90E32_UGAIN_IC4
+#define ATM90E32_UGAIN_IC4 ATM90E32_VOLTAGE_GAIN   // board 3, IC1 (CT13-15)
+#endif
+#ifndef ATM90E32_UGAIN_IC5
+#define ATM90E32_UGAIN_IC5 ATM90E32_VOLTAGE_GAIN   // board 3, IC2 (CT16-18)
+#endif
+
+// --------------------------------------------------------------------------
+// Per-channel scaling multipliers
+// --------------------------------------------------------------------------
+// Applied in software after the IC returns a reading. Use these to correct an
+// individual CT that reads high/low, or to flip a channel whose CT is clamped
+// backwards (negative pow_mul). Defaults are 1.0 = no correction.
+//   cur_mul -> current only.  pow_mul -> active AND apparent power.
+// Override a single channel with e.g. -DATM90E32_CUR_MUL_3=1.02
+#ifndef ATM90E32_CUR_MUL_DEFAULT
+#define ATM90E32_CUR_MUL_DEFAULT 1.0f
+#endif
+#ifndef ATM90E32_POW_MUL_DEFAULT
+#define ATM90E32_POW_MUL_DEFAULT 1.0f
+#endif
+
+// --------------------------------------------------------------------------
 // Public interface
 // --------------------------------------------------------------------------
 
@@ -105,5 +171,25 @@ void poll_atm90e32();
 
 bool atm90e32_board_ok(int boardIndex);
 float atm90e32_latest_amps(int channelIndex);
+
+// Latest IC die temperature in degrees C. icIndex is 0..ATM90E32_NUM_ICS-1
+// (IC1,IC2 of board 1, then board 2, ...). Returns NAN if out of range or the
+// board was skipped on the last poll.
+float atm90e32_temperature(int icIndex);
+
+// Latched status words from the last poll, for diagnostics and MQTT. See
+// atm90e32_status.h for decoding, and note the flags latch until re-init.
+struct ATM90E32IcStatus {
+    uint16_t sys0;    // EMMIntState0 (0x73) — sag / over-V / no-load   [cleared each poll]
+    uint16_t sys1;    // EMMIntState1 (0x74) — zero-cross / over-I / power fail [cleared]
+    uint16_t meter0;  // EMMState0    (0x71) — metering engine health   [live state]
+    uint16_t meter1;  // EMMState1    (0x72) — freq / phase seq / energy dir [live state]
+};
+bool atm90e32_ic_status(int icIndex, ATM90E32IcStatus *out);
+
+// Override the software correction for one CT channel (0..ATM90E32_NUM_CHANNELS-1).
+// Pass NAN for either argument to leave that multiplier unchanged. A negative
+// powMul flips active/apparent power, correcting a CT clamped on backwards.
+void atm90e32_set_channel_scale(int channel, float curMul, float powMul);
 
 #endif // METER_TYPE_ATM90E32
