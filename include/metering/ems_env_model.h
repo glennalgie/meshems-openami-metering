@@ -29,7 +29,7 @@ struct EMS_ENV_Model {
     float humidity_percent = 0.0;
     bool door_open = false;     // True = open, False = closed
     unsigned long timestamp_ms = 0; // Diagnostic uptime of last update
-    uint32_t last_seen_at = 0;
+    uint32_t last_seen_at = 0; // UTC epoch seconds of newest environment observation
     uint32_t temperature_observed_at = 0;
     uint32_t humidity_observed_at = 0;
     uint32_t door_observed_at = 0;
