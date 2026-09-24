@@ -2,6 +2,7 @@
 #include <TimeLib.h>
 #include <core/data_model.h>
 #include <metering/DTMPowerCache.h>
+#include <time_utils.h>
 
 Modbus_CHD130::Modbus_CHD130() {}
 /*
@@ -52,7 +53,7 @@ void Modbus_CHD130::poll() {
         last_reading.reactive_power = read_modbus_value(rREACTIVE_POWER);              // e.g. /1000
         last_reading.power_factor   = read_modbus_value(rPOWER_FACTOR);                // e.g. /1000
         last_reading.frequency      = read_modbus_value(rFREQUENCY);                   // e.g. /100
-        last_reading.timestamp_last_report = now();
+        last_reading.timestamp_last_report = utc_now();
         last_reading.metadata       = read_modbus_value(rMETADATA);
 
         Serial.printf("MODBUS CHD130: Total Energy: %.2f\n", last_reading.total_energy);

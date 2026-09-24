@@ -50,7 +50,13 @@ Front of the Meter Use Case
 
 TODO - soon is to breakup this mqtt client as its taking on mqtt higher level separated roles for a designated LVFeeder LeadEMS vs a regular policy enforcing building
    or streetpoleEMS edge of a building energy subsystem specifc policy enforcer or streetpoleEMS LVfeeder EMS policy enforcer role at multitenant subpanel
-TODO perhaps can decouple the higher level topics telemetry formating of the key "openami" schema framework separate from the basic emchanical operation of 
+TODO - MUST SOLVE: production deployment is not a single fixed MQTT_SERVER (see config.h). Each LV feeder needs its
+   own filtering, EMS+DER-aware MQTT relay proxy/broker (primary + secondary for no-single-point-of-failure), local
+   to the feeder, that locally brokers StreetPoleEMS/LeadEMS/tenant subpanel pub/sub and selectively relays
+   filtered/aggregated topics upstream to the Java Linux GroupLead EMS policy node. This client currently only
+   supports one hardcoded broker address/credential pair — connect/reconnect logic here will need to grow
+   primary/secondary broker failover once the feeder-level relay proxy exists.
+TODO perhaps can decouple the higher level topics telemetry formating of the key "openami" schema framework separate from the basic emchanical operation of
 establishing and encode and decode json documents and mqtt operations of a 2way mqtt monitor and control plane framework. key openami subtopics
    o  EMS-3phase energy reports actionable telemetry
    o  EMS-harmonics energy actionable telemetry
@@ -115,6 +121,7 @@ last_bandwidth_report_time  time in secs since last report
 #endif
 #include <metering/sunspec_model_11.h>
 #include <metering/ems_env_model.h>
+#include <time_utils.h>
 //#include "modbus_devices.h"             // added by Kevin - future use
 #include "core/data_model.h"
 // Debug MQTT serial output is controlled by the project-wide ENABLE_DEBUG flag.
@@ -200,6 +207,10 @@ static const char *mqtt_state_str(int state) {
 // -------------------------------------------------------------------
 boolean mqtt_connect()
 {
+  // Raise the socket timeout before connecting: the Ethernet/WiFi client
+  // defaults to 1000 ms, which is too tight for a DNS lookup plus TCP
+  // handshake to a WAN broker such as shiftr.io. From modbus-testing.
+  transportClient.setTimeout(5000);
   Serial.printf("MQTT: connecting to %s:%d as '%s' (socket timeout %d)\r\n",
                 MQTT_SERVER, MQTT_PORT, getDeviceID(), transportClient.getTimeout());
   // todo ENABLE_DEBUG_MQTT=1;  // allow for 1883 or 8883 encrypted telemetry and command and control
@@ -213,7 +224,6 @@ boolean mqtt_connect()
      return (0);
   }
 
-  //transportClient.setTimeout(60);//(MQTT_TIMEOUT);
   mqttclient.setSocketTimeout(6);//MQTT_TIMEOUT);
   if (!mqttclient.setBufferSize(MAX_DATA_LEN + 200)) {
     Serial.printf("MQTT: failed to resize buffer to %u bytes\n", (unsigned)(MAX_DATA_LEN + 200));
@@ -495,21 +505,14 @@ void mqtt_publish_EMS_MFR(long timestamp) {
 // Publish subpanel environmental data — temperature and humidity from the SHT20
 // sensor (always present on the RS-485 bus).
 void mqtt_publish_EMS_ENV(long timestamp) {
-  EMS_ENV_Model EMS_ENV_cache;
-  EMS_ENV_cache.timestamp_ms = (unsigned long)timestamp;
-#ifdef ENABLE_MODBUS_MASTER
+  (void)timestamp;
   // Only populate sensor values once the SHT20 has returned at least one
   // successful poll response — avoids publishing 0°C / 0% as real data
   // during boot or when the sensor is absent.
-  if (get_sht20_success_count() > 0) {
-    EMS_ENV_cache.temperature_C    = get_sht20_temperature();
-    EMS_ENV_cache.humidity_percent = get_sht20_humidity();
-    EMS_ENV_cache.last_modbus_update_ms = millis();
-  }
-#endif
   JsonDocument jsonDoc;
-  EMS_ENV_cache.toJson(jsonDoc);
-  jsonDoc["timestamp"] = timestamp;
+  ems_env_cache.toJson(jsonDoc);
+  jsonDoc["timestamp"] = ems_env_cache.last_seen_at;
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
   jsonDoc["status_ms"] = millis();
   jsonDoc["meter_count"] = MODBUS_NUM_METERS;
   jsonDoc["ct0_amps"] = (MODBUS_NUM_METERS > 0) ? readings[0].current : 0.0f;
@@ -1048,7 +1051,7 @@ void setup_mqtt_client() {
 }
 
 void loop_mqtt() {
-  uint32_t loop_timestamp = esp_log_timestamp();
+  uint32_t loop_timestamp = utc_now();
   const unsigned long nowMs = millis();
   static bool firstPublish = true;
   static unsigned long lastSubpanelMs = 0;
@@ -1199,16 +1202,19 @@ boolean mqtt_connected()
 
 // TODO add door contact/tamper and publish in OPENAMI EMS nde subtopic
 void mqtt_publish_door_opened() {
-  // Buffer sized to hold topic_device (~40 chars) + "/door" + null terminator.
-  char buf[128] = {0};
-  snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "open", true);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "open";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
 
 void mqtt_publish_door_closed() {
-  char buf[128] = {0};
-  snprintf(buf, sizeof(buf), "%s/door", topic_device.c_str());
-  mqttclient.publish(buf, "closed", true);
+  JsonDocument jsonDoc;
+  jsonDoc["state"] = "closed";
+  jsonDoc["timestamp"] = utc_now();
+  jsonDoc["time_sync_valid"] = utc_time_is_valid();
+  mqtt_publish_json("door", &jsonDoc);
 }
 
 #endif // ENABLE_MQTT

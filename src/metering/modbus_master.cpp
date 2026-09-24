@@ -27,6 +27,7 @@
 #include <core/pins.h>
 #include <core/data_model.h>
 #include <core/config.h>
+#include <metering/ems_env_model.h>
 #include <math.h>
 
 // --------------------------------------------------------------------------
@@ -422,7 +423,11 @@ void poll_thermostats() {
     // update() is called by poll_energy_meters() after meter data is fresh,
     // which prevents the full register-copy from running twice per cycle.
     uint8_t result = sht20.poll();
-    if (result != 0x00) dump_uart_rx();
+    if (result == ModbusMaster::ku8MBSuccess) {
+        ems_env_cache.updateModbusSensor(sht20.getTemperature(), sht20.getHumidity());
+    } else {
+        dump_uart_rx();
+    }
 }
 
 #if defined(ENABLE_LEAKAGE_MD0630)
