@@ -172,16 +172,43 @@ void generateTopics() {
 }
 
 // -------------------------------------------------------------------
+// Broker TCP port. 8883 would be TLS, which is not implemented here.
+#ifndef MQTT_PORT
+#define MQTT_PORT 1883
+#endif
+
+// Decode PubSubClient's state() into something readable. Without this the logs
+// print a bare integer and every connection failure looks identical.
+static const char *mqtt_state_str(int state) {
+  switch (state) {
+    case -4: return "CONNECTION_TIMEOUT (broker did not respond in keepalive)";
+    case -3: return "CONNECTION_LOST (network dropped)";
+    case -2: return "CONNECT_FAILED (TCP connect refused/unreachable)";
+    case -1: return "DISCONNECTED (clean client disconnect)";
+    case  0: return "CONNECTED";
+    case  1: return "BAD_PROTOCOL (broker rejected MQTT version)";
+    case  2: return "BAD_CLIENT_ID (broker rejected device ID)";
+    case  3: return "UNAVAILABLE (broker up but refusing connections)";
+    case  4: return "BAD_CREDENTIALS (MQTT_USER/MQTT_PW rejected)";
+    case  5: return "UNAUTHORIZED (client not permitted)";
+    default: return "UNKNOWN";
+  }
+}
+
 // MQTT Connect
 // Called only when MQTT server field is populated
 // -------------------------------------------------------------------
 boolean mqtt_connect()
 {
-  Serial.printf("MQTT Connecting...timeout in:%d\r\n", transportClient.getTimeout());
+  Serial.printf("MQTT: connecting to %s:%d as '%s' (socket timeout %d)\r\n",
+                MQTT_SERVER, MQTT_PORT, getDeviceID(), transportClient.getTimeout());
   // todo ENABLE_DEBUG_MQTT=1;  // allow for 1883 or 8883 encrypted telemetry and command and control
-  if (transportClient.connect(MQTT_SERVER, 1883) != 1) //8883 for TLS
+  if (transportClient.connect(MQTT_SERVER, MQTT_PORT) != 1) //8883 for TLS
   {
-     Serial.println("MQTT connect timeout.");
+     // This is the TCP layer, before any MQTT is spoken: DNS failure, no route,
+     // firewall, or nothing listening on the port.
+     Serial.printf("MQTT: TCP connect to %s:%d FAILED (DNS, routing, or broker down)\r\n",
+                   MQTT_SERVER, MQTT_PORT);
      // todo ENABLE_DEBUG_MQTT=0;
      return (0);
   }
@@ -209,7 +236,7 @@ boolean mqtt_connect()
   }
 
   if (mqttclient.state() == 0) {
-    Serial.printf("MQTT connected: %s\r\n", MQTT_SERVER);
+    Serial.printf("MQTT: connected to %s:%d\r\n", MQTT_SERVER, MQTT_PORT);
     
     //subscribe to command topic
     if (!mqttclient.subscribe(topic_cmd.c_str())) {
@@ -226,8 +253,9 @@ boolean mqtt_connect()
     mqtt_clear_retained_value("status/status");
     mqtt_publish_openami_status("connected");
   } else {
-    Serial.println("MQTT failed: ");
-    Serial.println(mqttclient.state());
+    const int st = mqttclient.state();
+    Serial.printf("MQTT: broker %s:%d REJECTED connection - state %d: %s\r\n",
+                  MQTT_SERVER, MQTT_PORT, st, mqtt_state_str(st));
     return (0);
   }
   return (1);
@@ -1148,7 +1176,9 @@ void poll_mqtt() {
 
 void maintain_mqtt_connection() {
     if (!mqttclient.connected()) {
-        Serial.println("MQTT: connection lost, attempting reconnect");
+        const int st = mqttclient.state();
+        Serial.printf("MQTT: connection lost to %s:%d - state %d: %s - reconnecting\r\n",
+                      MQTT_SERVER, MQTT_PORT, st, mqtt_state_str(st));
         mqtt_connect();
     }
 }

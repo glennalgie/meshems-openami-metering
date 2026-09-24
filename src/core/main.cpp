@@ -127,18 +127,89 @@
 
 
 // ============================================================
+// spi_cs_init()
+// ============================================================
+
+/**
+ * Deassert every chip select on the shared SPI bus before any device is
+ * initialised.
+ *
+ * SPI chip selects are ACTIVE LOW. Until a GPIO is explicitly configured it is
+ * a floating input, and a floating CS can read as LOW — which SELECTS that
+ * device. The W5500, the SD card and all ATM90E32 ICs sit on one bus (MOSI 11 /
+ * MISO 13 / CLK 12), so a single floating CS lets a second device drive MISO at
+ * the same time as whichever chip is being addressed. Every byte read comes
+ * back corrupted.
+ *
+ * This bit the Ethernet bring-up: setup_ethernet() runs early and performs a
+ * blocking DHCP exchange, but the ATM90E32 chip selects are not configured
+ * until setup_atm90e32() runs much later, and SD_CS not until setup_sd_card()
+ * later still. DHCP therefore ran with several CS lines floating and failed.
+ *
+ * Called first in setup(), before any SPI.begin() — matching EVPE, which does
+ * the same thing in its own spi_cs_init() (EVPE/src/main.cpp:131) for exactly
+ * this reason.
+ *
+ * NOTE: only pins for compiled-in features are driven here. If an ATM90E32
+ * stack board is PHYSICALLY attached but excluded by ATM90E32_NUM_BOARDS, its
+ * CS lines still float and can still corrupt the bus. Match
+ * ATM90E32_NUM_BOARDS to the hardware actually fitted.
+ */
+static void spi_cs_init() {
+    // Set all SPI chip-select pins HIGH (they are active low).
+#ifdef ENABLE_ETHERNET
+    pinMode(ETH_CS, OUTPUT);
+    digitalWrite(ETH_CS, HIGH);
+#endif
+
+#ifdef ENABLE_SD_CARD
+    pinMode(SD_CS, OUTPUT);
+    digitalWrite(SD_CS, HIGH);
+#endif
+
+#ifdef ENABLE_OLED_DISPLAY
+    pinMode(DISPLAY_CS_PIN, OUTPUT);
+    digitalWrite(DISPLAY_CS_PIN, HIGH);
+#endif
+
+#ifdef ENABLE_CAN
+    pinMode(CAN0_CS, OUTPUT);
+    digitalWrite(CAN0_CS, HIGH);
+#endif
+
+#ifdef METER_TYPE_ATM90E32
+    // Two ICs per stacked board; only the boards actually configured.
+    pinMode(ATM90E32_IC1_CS, OUTPUT);   digitalWrite(ATM90E32_IC1_CS, HIGH);
+    pinMode(ATM90E32_IC2_CS, OUTPUT);   digitalWrite(ATM90E32_IC2_CS, HIGH);
+  #if ATM90E32_NUM_BOARDS >= 2
+    pinMode(ATM90E32_IC1_CS_1, OUTPUT); digitalWrite(ATM90E32_IC1_CS_1, HIGH);
+    pinMode(ATM90E32_IC2_CS_1, OUTPUT); digitalWrite(ATM90E32_IC2_CS_1, HIGH);
+  #endif
+  #if ATM90E32_NUM_BOARDS >= 3
+    pinMode(ATM90E32_IC1_CS_2, OUTPUT); digitalWrite(ATM90E32_IC1_CS_2, HIGH);
+    pinMode(ATM90E32_IC2_CS_2, OUTPUT); digitalWrite(ATM90E32_IC2_CS_2, HIGH);
+  #endif
+#endif
+
+    Serial.println("INFO - SPI chip selects deasserted");
+}
+
+// ============================================================
 // setup()
 // ============================================================
 
 // One-time hardware and subsystem initialisation.
-// Runs in order: Serial → device ID → display splash → WiFi → MQTT →
-// Modbus master → Modbus client → CAN → buttons → relays.
+// Runs in order: Serial → SPI CS deassert → device ID → display splash →
+// WiFi/Ethernet → MQTT → Modbus master → Modbus client → CAN → buttons → relays.
 // Each subsystem is compiled in only when its feature flag is defined;
 // see the feature-flag table in the file header above.
 void setup() {
     Serial.begin(115200);
     Serial.println("INFO - Booting");
-    
+
+    // MUST run before any SPI device is touched — see spi_cs_init() above.
+    spi_cs_init();
+
     generateDeviceID();
 
 #ifdef ENABLE_OLED_DISPLAY
@@ -158,7 +229,12 @@ void setup() {
 #endif
 
 #ifdef ENABLE_ETHERNET
-    setup_ethernet();
+    // Return value matters: without a lease there is no IP and no DNS, so every
+    // later subsystem that dials out (MQTT especially) will fail in a way that
+    // looks like its own bug rather than a network one.
+    if (!setup_ethernet()) {
+        Serial.println("INFO - Ethernet did not come up; network features will fail until it does");
+    }
 #endif
 
 #ifdef ENABLE_MQTT
