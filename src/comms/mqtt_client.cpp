@@ -1050,6 +1050,73 @@ void setup_mqtt_client() {
   mqtt_interval_ts = now();
 }
 
+// ---------------------------------------------------------------------------
+// Change-driven publishing for the per-tenant meter topics
+// ---------------------------------------------------------------------------
+// A fixed MQTTPublish_meter_group_rate (2 min) means switching a load on or off
+// is invisible for up to two minutes, even though the meters are polled every
+// 3 s. These helpers let a meaningful change publish immediately, while the
+// interval stays as a heartbeat so a quiet channel still reports periodically.
+//
+// Deadbands keep this from becoming a firehose on CT noise: a channel must move
+// by more than BOTH an absolute floor and a relative fraction to count. The
+// absolute floor stops a near-zero channel chattering; the relative term stops a
+// heavily loaded channel republishing on trivial wobble.
+//
+// MQTT_METER_MIN_INTERVAL_MS is a per-meter rate limit so a rapidly changing
+// load cannot publish faster than the link can carry — important on the
+// bandwidth-constrained G3/PLC/LoRa transports this is aimed at.
+
+#ifndef MQTT_METER_DELTA_AMPS
+#define MQTT_METER_DELTA_AMPS 0.10f      // absolute current deadband (A)
+#endif
+#ifndef MQTT_METER_DELTA_WATTS
+#define MQTT_METER_DELTA_WATTS 25.0f     // absolute active-power deadband (W)
+#endif
+#ifndef MQTT_METER_DELTA_FRACTION
+#define MQTT_METER_DELTA_FRACTION 0.05f  // relative deadband (5%)
+#endif
+#ifndef MQTT_METER_MIN_INTERVAL_MS
+#define MQTT_METER_MIN_INTERVAL_MS 3000  // per-meter rate limit
+#endif
+
+struct MeterPublishState {
+    float         last_current = 0.0f;   // A
+    float         last_power_w = 0.0f;   // W
+    unsigned long last_publish_ms = 0;
+    bool          seeded = false;
+};
+static MeterPublishState meter_pub[MODBUS_NUM_METERS];
+
+// True when this meter has moved enough to be worth a message right now.
+static bool meter_changed(int i, const PowerData &r, unsigned long nowMs) {
+    MeterPublishState &st = meter_pub[i];
+    if (!st.seeded) return true;                       // first sight always publishes
+    if (nowMs - st.last_publish_ms < MQTT_METER_MIN_INTERVAL_MS) return false;
+
+    const float now_w  = r.active_power * 1000.0f;     // data model holds kW
+    const float d_amps = fabsf(r.current - st.last_current);
+    const float d_watts = fabsf(now_w - st.last_power_w);
+
+    // Relative term is measured against the larger of the two samples so a
+    // fall to zero is judged against the load that was there, not against zero.
+    const float ref_a = fmaxf(fabsf(r.current), fabsf(st.last_current));
+    const float ref_w = fmaxf(fabsf(now_w),     fabsf(st.last_power_w));
+
+    const bool amps_moved  = (d_amps  > MQTT_METER_DELTA_AMPS)
+                          && (d_amps  > ref_a * MQTT_METER_DELTA_FRACTION);
+    const bool watts_moved = (d_watts > MQTT_METER_DELTA_WATTS)
+                          && (d_watts > ref_w * MQTT_METER_DELTA_FRACTION);
+    return amps_moved || watts_moved;
+}
+
+static void meter_publish_mark(int i, const PowerData &r, unsigned long nowMs) {
+    meter_pub[i].last_current    = r.current;
+    meter_pub[i].last_power_w    = r.active_power * 1000.0f;
+    meter_pub[i].last_publish_ms = nowMs;
+    meter_pub[i].seeded          = true;
+}
+
 void loop_mqtt() {
   uint32_t loop_timestamp = utc_now();
   const unsigned long nowMs = millis();
@@ -1147,15 +1214,21 @@ void loop_mqtt() {
       }
 
     // next is loop over the subpanel per tenant meters   
-    if (publish_due(lastMeterGroupMs, MQTTPublish_meter_group_rate)) {
+    // Heartbeat covers every meter on the configured interval; between
+    // heartbeats an individual meter publishes as soon as it moves meaningfully.
+    const bool meter_heartbeat = publish_due(lastMeterGroupMs, MQTTPublish_meter_group_rate);
     for(int i=0;i<MODBUS_NUM_METERS;i++) {
-          mqtt_publish_Meter(i, readings[i]);  
+          const bool changed = meter_changed(i, readings[i], nowMs);
+          if (!meter_heartbeat && !changed) continue;
+          mqtt_publish_Meter(i, readings[i]);
+          meter_publish_mark(i, readings[i], nowMs);
           // TODO add modbus node number and per meter leakage RCD Fault in the readings powerdata
           #ifdef ENABLE_DEBUG
-          Serial.printf("Published tenant meter %d\n", i);
+          Serial.printf("Published tenant meter %d (%s: %.3fA %.1fW)\n",
+                        i, meter_heartbeat ? "heartbeat" : "changed",
+                        readings[i].current, readings[i].active_power * 1000.0f);
           #endif
         }
-    }
 #endif // ENABLE_MODBUS_MASTER
       firstPublish = false;
       } else {
