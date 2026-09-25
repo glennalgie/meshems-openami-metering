@@ -161,13 +161,32 @@ void poll_atm90e32() {
         const int ic_a = board * 2;      // IC1 slot in the per-IC tables
         const int ic_b = board * 2 + 1;  // IC2 slot
 
-        // Validate SPI comms — 0x0000 or 0xFFFF indicates no response.
+        // ---- Liveness probe ----
+        // 0xFFFF means MISO sat high for the whole transfer: nothing is driving
+        // the bus, so the IC really is absent or deselected.
+        //
+        // 0x0000 is NOT a fault, and treating it as one was a bug. GetSysStatus0()
+        // reads EMMIntState0, the LATCHED INTERRUPT register; it reads zero
+        // whenever no event has occurred since it was last cleared, which is the
+        // normal quiet state of a healthy IC. Because a zero made this loop
+        // 'continue', readings[] was left holding its previous contents — so
+        // switching a load OFF froze the channel at its last loaded value instead
+        // of falling to zero. Clearing the latched flags each poll (added with the
+        // vendored ClearSysStatus0/1) made a zero far more likely and turned an
+        // intermittent bug into a reliable one.
+        //
+        // Liveness is now judged on the AC voltage reference instead. Every CT
+        // channel on an IC shares that reference, and it reflects the mains, not
+        // the load — so it stays at line voltage whether the hairdryer is on or
+        // off, while genuinely reading ~0 if the board loses power or the SPI
+        // link dies.
         unsigned short sys0 = ic1[board].GetSysStatus0();
-        board_ok[board] = !(sys0 == 0x0000 || sys0 == 0xFFFF);
-        if (sys0 == 0x0000 || sys0 == 0xFFFF) {
+        float vref = ic1[board].GetLineVoltageA();
+        board_ok[board] = (sys0 != 0xFFFF) && (vref > ATM90E32_MIN_LIVE_VOLTS);
+        if (!board_ok[board]) {
             #ifdef ENABLE_DEBUG
-            Serial.printf("ATM90E32 board %d: no response (SysStatus0=0x%04X), skipping\n",
-                          board, sys0);
+            Serial.printf("ATM90E32 board %d: no response (SysStatus0=0x%04X, Vref=%.1fV), skipping\n",
+                          board, sys0, vref);
             #endif
             ic_temp[ic_a] = NAN;
             ic_temp[ic_b] = NAN;

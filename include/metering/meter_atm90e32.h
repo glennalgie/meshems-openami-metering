@@ -158,6 +158,14 @@
 #define ATM90E32_POW_MUL_DEFAULT 1.0f
 #endif
 
+// Minimum AC reference volts for an IC to count as alive. Above this the IC is
+// powered and talking; at or below it the board has lost mains or the SPI link.
+// Deliberately well under any real line voltage (100/120/230/240 V) and well
+// above the noise floor of a dead read.
+#ifndef ATM90E32_MIN_LIVE_VOLTS
+#define ATM90E32_MIN_LIVE_VOLTS 5.0f
+#endif
+
 // --------------------------------------------------------------------------
 // Public interface
 // --------------------------------------------------------------------------
