@@ -59,17 +59,26 @@ struct LeakageChannel {
 struct LeakageModel { // TODO  review leakage specs and consult with SME's
     uint16_t model_id = 999;
     uint16_t length = 30;
-    LeakageChannel acSinusoidal;   // Type A AC sinusoidal
-    LeakageChannel acPulsating;    // Type A AC pulsating (rectified)
+    LeakageChannel acSinusoidal;   // Type A AC sinusoidal — the real MD0630 AC reading
+    LeakageChannel acPulsating;    // Type A AC pulsating (rectified) — no sensor on this
+                                   // bus currently reports this; always updated with 0.0
+                                   // from modbus_master.cpp and published as unsupported
+                                   // (null) below, not as a plausible zero reading.
     LeakageChannel dc;             // Type B DC residual
 
     uint32_t lastUpdateMs = 0;
     bool valid = false;
 
+    LeakageModel() {
+        dc.threshold_mA = 6.0f;   // Type B life-safety default is 6 mA, not the 30 mA
+                                   // the generic LeakageChannel default was built for.
+    }
+
     void clear() {
         acSinusoidal = LeakageChannel();
         acPulsating = LeakageChannel();
         dc = LeakageChannel();
+        dc.threshold_mA = 6.0f;
         lastUpdateMs = millis();
         valid = false;
     }
@@ -90,10 +99,25 @@ struct LeakageModel { // TODO  review leakage specs and consult with SME's
     // Modern way to create nested objects - compiler friendly
     JsonObject acSin = doc["acSinusoidal"].to<JsonObject>();
     acSinusoidal.toJson(acSin);
-    JsonObject acPulse = doc["acPulsating"].to<JsonObject>();
-    acPulsating.toJson(acPulse);
+    // acPulsating has no real sensor behind it on this bus: publish it explicitly as
+    // unsupported rather than a fake all-zero reading a UX could mistake for real data.
+    doc["acPulsating"] = (char*)0;
     JsonObject dcObj = doc["dc"].to<JsonObject>();
-    //TODO DC default needs to init to 6 milli amp as the threshold_mA
     dc.toJson(dcObj);
+
+    // Maintenance call-to-action: one flat field set the UX can trigger a panel from
+    // directly, instead of reading two nested inFault flags itself.
+    bool anyFault = acSinusoidal.inFault || dc.inFault;
+    JsonObject maint = doc["maintenance"].to<JsonObject>();
+    maint["inFault"] = anyFault;
+    if (acSinusoidal.inFault && dc.inFault) {
+        maint["message"] = "AC and DC leakage both above threshold. Technician dispatch required.";
+    } else if (acSinusoidal.inFault) {
+        maint["message"] = "AC leakage above threshold. Check wiring and insulation.";
+    } else if (dc.inFault) {
+        maint["message"] = "DC leakage above threshold. Check wiring and insulation.";
+    } else {
+        maint["message"] = (char*)0;
+    }
     }
 };
