@@ -69,6 +69,13 @@ struct LeakageModel { // TODO  review leakage specs and consult with SME's
     uint32_t lastUpdateMs = 0;
     bool valid = false;
 
+    // 3-phase expansion (per README node-numbering: leakage node 100 = phase A,
+    // 101 = phase B, 102 = phase C). Only phase A has a sensor wired today; B and C
+    // are declared here so the schema is ready, and published as unsupported (null)
+    // below rather than a fabricated reading, until a second and third CT exist.
+    bool isolation_known = false;   // true once LEAKAGE_ALARM_SENSE reports a real read
+    bool isolation_open  = true;    // meaningful only when isolation_known is true
+
     LeakageModel() {
         dc.threshold_mA = 6.0f;   // Type B life-safety default is 6 mA, not the 30 mA
                                    // the generic LeakageChannel default was built for.
@@ -118,6 +125,21 @@ struct LeakageModel { // TODO  review leakage specs and consult with SME's
         maint["message"] = "DC leakage above threshold. Check wiring and insulation.";
     } else {
         maint["message"] = (char*)0;
+    }
+
+    // 3-phase expansion: phase A is the real sensor above (acSinusoidal/dc). Phase
+    // B and C are declared but not fabricated, since no second or third CT is wired
+    // yet. monitored_circuit_ids follows the README's node-numbering plan.
+    doc["monitored_circuit_ids"] = "100";   // will become ["100","101","102"] once B/C exist
+    doc["phase_b"] = (char*)0;
+    doc["phase_c"] = (char*)0;
+
+    // Isolation feedback: real value only if the S6-A hardware alarm sense lines are
+    // compiled in and wired; otherwise explicit unknown, never a guessed "closed".
+    if (isolation_known) {
+        doc["isolation_feedback"] = isolation_open ? "open" : "closed";
+    } else {
+        doc["isolation_feedback"] = (char*)0;
     }
     }
 };

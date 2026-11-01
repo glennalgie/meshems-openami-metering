@@ -548,7 +548,15 @@ void service_leakage_alarms() {
     uint32_t now = millis();
     if (now - last < 20) return;               // ~50 Hz, cheap debounce
     last = now;
-    if (leakageAlarms.poll())
+    bool changed = leakageAlarms.poll();
+
+    // Surface the real read-only hardware alarm state as isolation_feedback on the
+    // published leakage model. "open" means a trip condition is asserted; this is
+    // observation only, it never drives the trip itself.
+    leakageModel.isolation_known = true;
+    leakageModel.isolation_open  = leakageAlarms.any();
+
+    if (changed)
         Serial.printf("S6 ALARM edge: AC=%d DC=%d FAULT=%d\n",
                       leakageAlarms.ac(), leakageAlarms.dc(), leakageAlarms.fault());
 #endif
