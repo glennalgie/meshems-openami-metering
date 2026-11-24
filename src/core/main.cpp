@@ -45,6 +45,8 @@
  *   -DENABLE_SD_CARD         SD card reader via SPI (BOARD_VER_V3 only)
  *   -DENABLE_SD_SHT20_LOG    Log SHT20 readings to /environmental_log.csv; interval set by SD_SHT20_LOG_INTERVAL_MS (default 60 s)
  *   -DENABLE_DEBUG           Extra debug Serial logging
+ *   -DMPM_REST_ENABLE        MPM Manager REST metering side-channel (mock transport only - see
+ *                            docs/mpm_manager_integration/Street-EMS_MPM_design_v0.1.md)
  * ============================================================
  */
 
@@ -96,6 +98,12 @@
 // ---- MQTT -------------------------------------------------------------------
 #ifdef ENABLE_MQTT
   #include <comms/mqtt_client.h>
+#endif
+
+// ---- MPM Manager REST side-channel (EnAccess MicroPowerManager) ------------
+// Independent of OPENAMI/MQTT above - see comms/mpm_rest_client.h.
+#ifdef MPM_REST_ENABLE
+  #include <comms/mpm_rest_client.h>
 #endif
 
 // ---- Modbus -----------------------------------------------------------------
@@ -163,6 +171,10 @@ void setup() {
 
 #ifdef ENABLE_MQTT
     setup_mqtt_client();
+#endif
+
+#ifdef MPM_REST_ENABLE
+    setup_mpm_rest();
 #endif
 
     // TODO: setup_powerData_caches() — planned per-topic DTM power caches for
@@ -298,6 +310,13 @@ void loop() {
             loop_mqtt();
         }
     }
+#endif
+
+    // ==================== MPM Manager REST side-channel ==================
+    // Self-gated internally (MPMUpload_rate) - safe to call every iteration.
+    // Independent of OPENAMI/MQTT above; see comms/mpm_rest_client.h.
+#ifdef MPM_REST_ENABLE
+    loop_mpm_rest();
 #endif
 
     // ==================== Peripheral sub-loops ==========================

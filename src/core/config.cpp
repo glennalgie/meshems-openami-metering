@@ -17,6 +17,7 @@ int MQTTPublish_leakage_rate = 10000;        // subpanel_RCMleaks: 10 s (demo/br
 int MQTTPublish_harmonics_rate = 900000;     // subpanel_harmonics: 15 min
 int MQTTPublish_ssr_rate = 120000;           // subpanel_ssr: 2 min
 int MQTTPoll_rate = 60000;                   // MQTT client loop / keepalive tick
+int MPMUpload_rate = 300000;                 // MPM Manager REST upload: 5 min default
 int RelayDefault_warning_grace_ms = 60000;   // warn after 1 minute over threshold
 int RelayDefault_excess_trip_ms = 60000;     // open relay after warning persists another minute
 

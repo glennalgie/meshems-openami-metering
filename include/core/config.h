@@ -50,6 +50,7 @@ extern int MQTTPublish_leakage_rate;       // subpanel_RCMleaks publish interval
 extern int MQTTPublish_harmonics_rate;     // subpanel_harmonics publish interval
 extern int MQTTPublish_ssr_rate;           // subpanel_ssr publish interval
 extern int MQTTPoll_rate;         //in milliseconds, how often to call mqttclient.loop()
+extern int MPMUpload_rate;        // ms between MPM Manager REST upload attempts (independent of OPENAMI's own cadence)
 extern int RelayDefault_warning_grace_ms;  // delay before marking warning after a threshold is exceeded
 extern int RelayDefault_excess_trip_ms;    // delay after warning before opening relay if excess continues
 

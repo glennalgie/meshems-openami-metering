@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Street-EMS Ops - Feeder Safety Dashboard (concept)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:        #f9f9f7;
+    --surface-1:   #fcfcfb;
+    --text-primary:#0b0b0b;
+    --text-secondary:#52514e;
+    --muted:       #898781;
+    --gridline:    #e1e0d9;
+    --border:      rgba(11,11,11,0.10);
+    --series-1:    #2a78d6;   /* blue, sequential/accent */
+    --series-1-light: #cde2fb;
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --serious:     #ec835a;
+    --critical:    #d03b3b;
+    --label-on-fill: #ffffff;
+    --label-on-warning: #0b0b0b;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface-1:   #1a1a19;
+    --text-primary:#f0efec;
+    --text-secondary:#c3c2b7;
+    --muted:       #898781;
+    --gridline:    #2c2c2a;
+    --border:      rgba(255,255,255,0.10);
+    --series-1:    #3987e5;
+    --series-1-light: #184f95;
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --serious:     #ec835a;
+    --critical:    #e66767;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+  }
+  header.topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; background: var(--surface-1); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 36px; height: 36px; border-radius: 8px; background: var(--series-1);
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;
+  }
+  .brand h1 { font-size: 16px; margin: 0; }
+  .brand p { margin: 0; font-size: 12px; color: var(--text-secondary); }
+  .mockup-badge {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    background: var(--series-1-light); color: var(--series-1); padding: 3px 9px; border-radius: 999px;
+    margin-left: 10px;
+  }
+  :root[data-theme="dark"] .mockup-badge { color: #fff; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  select, button {
+    font-family: inherit; font-size: 13px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); padding: 8px 12px; cursor: pointer;
+  }
+  button.primary { background: var(--series-1); color: #fff; border-color: var(--series-1); font-weight: 600; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 28px 60px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .stat-tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+  .stat-tile .value { font-size: 28px; font-weight: 600; line-height: 1; }
+  .stat-tile .value.critical { color: var(--critical); }
+  .stat-tile .sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  .legend-row {
+    display: flex; gap: 18px; align-items: center; margin-bottom: 18px; font-size: 12px; color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+  .legend-row .item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin: 28px 0 12px; }
+  .section-head h2 { font-size: 14px; margin: 0; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+
+  .feeder-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .feeder-card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+    transition: box-shadow .15s ease;
+  }
+  .feeder-card.state-critical { box-shadow: 0 0 0 1.5px var(--critical) inset; }
+  .feeder-card.state-offline { opacity: .6; }
+  .feeder-card .fc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .feeder-card .fc-id { font-weight: 600; font-size: 14px; }
+  .feeder-card .fc-sub { font-size: 12px; color: var(--text-secondary); }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .status-pill .dot { width: 8px; height: 8px; }
+  .status-pill.good     { background: color-mix(in srgb, var(--good) 15%, transparent);     color: var(--good); }
+  .status-pill.warning  { background: color-mix(in srgb, var(--warning) 20%, transparent);  color: #946500; }
+  :root[data-theme="dark"] .status-pill.warning { color: var(--warning); }
+  .status-pill.critical { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+  .status-pill.offline  { background: var(--gridline); color: var(--muted); }
+  .status-pill.critical .dot { animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  .meter-row { margin: 10px 0; }
+  .meter-row .mr-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  .meter-row .mr-label .val { font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
+  .meter-track { height: 10px; border-radius: 999px; background: var(--gridline); overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 999px; }
+  .meter-fill.good { background: var(--good); }
+  .meter-fill.warning { background: var(--warning); }
+  .meter-fill.critical { background: var(--critical); }
+
+  .fc-meta { font-size: 11px; color: var(--muted); margin: 10px 0 12px; }
+  .fc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .fc-actions button { font-size: 12px; padding: 7px 10px; }
+  .fc-actions .ack { border-color: var(--warning); color: #946500; }
+  :root[data-theme="dark"] .fc-actions .ack { color: var(--warning); }
+  .fc-actions .trip { border-color: var(--critical); color: var(--critical); }
+  .fc-actions .restore { border-color: var(--good); color: var(--good); }
+
+  .tripped-banner {
+    font-size: 12px; font-weight: 600; color: #fff; background: var(--text-primary);
+    padding: 6px 10px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .log-panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 4px 18px; max-height: 260px; overflow-y: auto; }
+  .log-entry { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gridline); font-size: 13px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-entry .t { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 66px; }
+  .log-entry .tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 999px; height: fit-content; white-space: nowrap;
+  }
+  .log-entry .tag.alarm { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+  .log-entry .tag.command { background: var(--series-1-light); color: var(--series-1); }
+  :root[data-theme="dark"] .log-entry .tag.command { color: #fff; }
+  .log-entry .tag.ack { background: color-mix(in srgb, var(--warning) 20%, transparent); color: #946500; }
+  :root[data-theme="dark"] .log-entry .tag.ack { color: var(--warning); }
+
+  footer {
+    max-width: 1180px; margin: 10px auto 40px; padding: 14px 28px; font-size: 12px; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+  footer strong { color: var(--text-secondary); }
+
+  @media (max-width: 760px) {
+    .kpi-row, .feeder-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <h1>Street-EMS Ops <span class="mockup-badge">Concept mockup</span></h1>
+      <p>Feeder safety &amp; control - sample data, not wired to a live broker</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <select disabled title="Mockup - single site">
+      <option>REIC Pilot - Feeder Expansion</option>
+    </select>
+    <button class="ghost" id="themeToggle" type="button">Dark mode</button>
+    <button class="primary" id="simulateBtn" type="button">Simulate live alarm</button>
+  </div>
+</header>
+
+<main>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="legend-row">
+    <span class="item"><span class="dot" style="background:var(--good)"></span>Normal</span>
+    <span class="item"><span class="dot" style="background:var(--warning)"></span>Warning - approaching threshold</span>
+    <span class="item"><span class="dot" style="background:var(--critical)"></span>Alarm - over threshold</span>
+    <span class="item"><span class="dot" style="background:var(--muted)"></span>Offline - no data</span>
+  </div>
+
+  <div class="section-head"><h2>Feeders</h2></div>
+  <div class="feeder-grid" id="feederGrid"></div>
+
+  <div class="section-head"><h2>Activity &amp; command log</h2></div>
+  <div class="log-panel" id="logPanel"></div>
+
+</main>
+
+<footer>
+  <strong>What this is:</strong> a concept mockup of the live operations view Jude asked for on the REIC call -
+  alarm status and contactor commands a non-engineer can read at a glance, instead of raw MQTT topics.
+  Real data would come from <code>openami/&lt;deviceID&gt;/subpanel_RCMleaks</code> (AC/DC leakage mA, alarm flags)
+  already published by the Street-EMS firmware; commands would publish back to the same broker.
+  <strong>MPM Manager stays the system of record for customers and billing</strong> - this dashboard is the
+  safety/alarm layer MPM doesn't cover, not a replacement for it. For review before anything gets wired up live.
+</footer>
+
+<script>
+(function () {
+  const root = document.documentElement;
+  const themeToggle = document.getElementById('themeToggle');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (prefersDark) root.setAttribute('data-theme', 'dark');
+  themeToggle.textContent = root.getAttribute('data-theme') === 'dark' ? 'Light mode' : 'Dark mode';
+  themeToggle.addEventListener('click', () => {
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    themeToggle.textContent = isDark ? 'Dark mode' : 'Light mode';
+  });
+
+  // Thresholds match the real firmware defaults (leakage_model_ivy41a.h): 30 mA AC, 6 mA DC.
+  const AC_THRESHOLD = 30, DC_THRESHOLD = 6;
+
+  const feeders = [
+    { id: 'StreetEMS_feeder_01', village: 'REIC Pilot - Zone A', tenants: 6,  ac: 2.1,  dc: 1.8, tripped: false, acked: false, offline: false, updated: '2 min ago' },
+    { id: 'StreetEMS_feeder_02', village: 'REIC Pilot - Zone A', tenants: 9,  ac: 27.4, dc: 2.1, tripped: false, acked: false, offline: false, updated: '1 min ago' },
+    { id: 'StreetEMS_feeder_03', village: 'REIC Pilot - Zone B', tenants: 12, ac: 4.3,  dc: 7.9, tripped: false, acked: false, offline: false, updated: 'just now' },
+    { id: 'StreetEMS_feeder_04', village: 'REIC Pilot - Zone B', tenants: 6,  ac: 1.4,  dc: 0.9, tripped: false, acked: false, offline: true,  updated: '34 min ago' },
+  ];
+
+  const log = [
+    { t: '08:41', tag: 'alarm',   text: 'StreetEMS_feeder_03 - DC leakage crossed 6.0 mA threshold (reading 7.9 mA)' },
+    { t: '08:22', tag: 'command', text: 'Operator restored contactor on StreetEMS_feeder_02 after maintenance' },
+  ];
+
+  function status(f) {
+    if (f.offline) return 'offline';
+    if (f.ac >= AC_THRESHOLD || f.dc >= DC_THRESHOLD) return 'critical';
+    if (f.ac >= AC_THRESHOLD * 0.85 || f.dc >= DC_THRESHOLD * 0.85) return 'warning';
+    return 'good';
+  }
+  function statusLabel(s) {
+    return { good: 'Normal', warning: 'Warning', critical: 'Alarm', offline: 'Offline' }[s];
+  }
+  function meterClass(value, threshold) {
+    const ratio = value / threshold;
+    if (ratio >= 1) return 'critical';
+    if (ratio >= 0.85) return 'warning';
+    return 'good';
+  }
+  function pct(value, threshold) { return Math.min(100, (value / threshold) * 100).toFixed(0); }
+  function nowShort() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 5);
+  }
+  function pushLog(tag, text) {
+    log.unshift({ t: nowShort(), tag, text });
+    renderLog();
+  }
+
+  function renderKpis() {
+    const activeAlarms = feeders.filter(f => status(f) === 'critical').length;
+    const tenants = feeders.reduce((s, f) => s + f.tenants, 0);
+    const tripped = feeders.filter(f => f.tripped).length;
+    const kpis = [
+      { label: 'Feeders monitored', value: feeders.length, sub: feeders.filter(f => !f.offline).length + ' reporting now' },
+      { label: 'Tenants covered', value: tenants, sub: 'across ' + feeders.length + ' feeders' },
+      { label: 'Active alarms', value: activeAlarms, critical: activeAlarms > 0, sub: activeAlarms > 0 ? 'needs acknowledgement' : 'all clear' },
+      { label: 'Contactors open', value: tripped, sub: tripped > 0 ? 'manually tripped' : 'all closed' },
+    ];
+    document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+      <div class="stat-tile">
+        <div class="label">${k.label}</div>
+        <div class="value${k.critical ? ' critical' : ''}">${k.value}</div>
+        <div class="sub">${k.sub}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderFeeders() {
+    document.getElementById('feederGrid').innerHTML = feeders.map((f, i) => {
+      const s = status(f);
+      const acClass = meterClass(f.ac, AC_THRESHOLD);
+      const dcClass = meterClass(f.dc, DC_THRESHOLD);
+      const canAck = s === 'critical' && !f.acked;
+      return `
+      <div class="feeder-card state-${s}">
+        <div class="fc-head">
+          <div>
+            <div class="fc-id">${f.id}</div>
+            <div class="fc-sub">${f.village} · ${f.tenants} tenants</div>
+          </div>
+          <span class="status-pill ${s}"><span class="dot" style="background:currentColor"></span>${statusLabel(s)}${f.acked && s === 'critical' ? ' · ack\'d' : ''}</span>
+        </div>
+
+        ${f.tripped ? `<div class="tripped-banner"><span>⛔ Contactor open - manually tripped</span></div>` : ''}
+
+        ${f.offline ? `<div class="fc-meta">No data received - last seen ${f.updated}</div>` : `
+        <div class="meter-row">
+          <div class="mr-label"><span>AC leakage</span><span class="val">${f.ac.toFixed(1)} / ${AC_THRESHOLD} mA</span></div>
+          <div class="meter-track"><div class="meter-fill ${acClass}" style="width:${pct(f.ac, AC_THRESHOLD)}%"></div></div>
+        </div>
+        <div class="meter-row">
+          <div class="mr-label"><span>DC leakage</span><span class="val">${f.dc.toFixed(1)} / ${DC_THRESHOLD} mA</span></div>
+          <div class="meter-track"><div class="meter-fill ${dcClass}" style="width:${pct(f.dc, DC_THRESHOLD)}%"></div></div>
+        </div>
+        <div class="fc-meta">Updated ${f.updated}</div>
+        `}
+
+        <div class="fc-actions">
+          <button class="ack" data-action="ack" data-i="${i}" ${!canAck ? 'disabled' : ''}>Acknowledge</button>
+          ${f.tripped
+            ? `<button class="restore" data-action="restore" data-i="${i}">Restore contactor</button>`
+            : `<button class="trip" data-action="trip" data-i="${i}" ${f.offline ? 'disabled' : ''}>Trip contactor</button>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    document.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.i);
+        const f = feeders[i];
+        if (btn.dataset.action === 'ack') {
+          f.acked = true;
+          pushLog('ack', `Operator acknowledged alarm on ${f.id}`);
+        } else if (btn.dataset.action === 'trip') {
+          f.tripped = true;
+          pushLog('command', `Operator opened contactor on ${f.id} (manual trip)`);
+        } else if (btn.dataset.action === 'restore') {
+          f.tripped = false;
+          pushLog('command', `Operator restored contactor on ${f.id}`);
+        }
+        renderKpis();
+        renderFeeders();
+      });
+    });
+  }
+
+  function renderLog() {
+    document.getElementById('logPanel').innerHTML = log.map(l => `
+      <div class="log-entry">
+        <span class="t">${l.t}</span>
+        <span class="tag ${l.tag}">${l.tag}</span>
+        <span>${l.text}</span>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('simulateBtn').addEventListener('click', () => {
+    const normal = feeders.filter(f => !f.offline && status(f) !== 'critical');
+    if (!normal.length) return;
+    const f = normal[Math.floor(Math.random() * normal.length)];
+    f.dc = (DC_THRESHOLD + 0.5 + Math.random() * 2);
+    f.acked = false;
+    f.updated = 'just now';
+    pushLog('alarm', `${f.id} - DC leakage crossed ${DC_THRESHOLD.toFixed(1)} mA threshold (reading ${f.dc.toFixed(1)} mA)`);
+    renderKpis();
+    renderFeeders();
+  });
+
+  renderKpis();
+  renderFeeders();
+  renderLog();
+})();
+</script>
+
+</body>
+</html>
